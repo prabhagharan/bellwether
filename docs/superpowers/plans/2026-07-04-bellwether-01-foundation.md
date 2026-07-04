@@ -1,5 +1,7 @@
 # bellwether Plan 1 — Foundation Implementation Plan
 
+> **Status: ✅ Complete** — merged to `main` (2026-07-04, commit `b716de5`) via subagent-driven development. All 10 tasks implemented, task- and whole-branch-reviewed; final review's two Important findings (test isolation via `dependency_overrides`, `is_active` enforced at login) fixed. Suite: 16/16 passing, pristine. The `- [ ]` checkboxes below are left as the original plan of record; see git history for execution.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up a bootable, authenticated FastAPI service on Postgres — configuration, database + migrations, JWT auth, and an env-seeded admin account — that later plans build the pipeline on.
