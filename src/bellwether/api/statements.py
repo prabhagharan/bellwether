@@ -13,7 +13,7 @@ router = APIRouter()
 def get_statements(
     figure_id: int | None = None,
     status: str | None = None,
-    limit: int = Query(default=50, le=500),
+    limit: int = Query(default=50, ge=1, le=500),
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):

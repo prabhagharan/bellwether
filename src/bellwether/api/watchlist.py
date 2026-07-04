@@ -30,12 +30,12 @@ def delete_figure(figure_id: int, session: Session = Depends(get_session),
 @router.post("/figures/{figure_id}/sources", response_model=SourceRead, status_code=status.HTTP_201_CREATED)
 def add_source(figure_id: int, body: SourceCreate, session: Session = Depends(get_session),
                user: User = Depends(get_current_user)):
+    if repo.get_figure(session, figure_id, owner_id=user.id) is None:
+        raise HTTPException(status_code=404, detail="Figure not found")
     if body.connector_type == "rss" and "feed_url" not in body.config:
         raise HTTPException(status_code=422, detail="rss source requires config.feed_url")
     source = repo.add_source(session, figure_id, body.connector_type, body.config,
                              body.provenance, "manual", owner_id=user.id)
-    if source is None:
-        raise HTTPException(status_code=404, detail="Figure not found")
     return source
 
 

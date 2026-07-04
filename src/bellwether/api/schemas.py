@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,9 +19,9 @@ class FigureRead(BaseModel):
 
 
 class SourceCreate(BaseModel):
-    connector_type: str
+    connector_type: Literal["rss", "x", "youtube", "news"]
     config: dict
-    provenance: str = "primary"
+    provenance: Literal["primary", "reported"] = "primary"
 
 
 class SourceRead(BaseModel):

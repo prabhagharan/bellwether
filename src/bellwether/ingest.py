@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from bellwether.connectors.registry import build_connector, UnknownConnectorType
+from bellwether.connectors.registry import build_connector
 from bellwether.models.source import Source
 from bellwether.models.statement import Statement
+
+logger = logging.getLogger(__name__)
 
 
 def ingest_source(session: Session, source: Source) -> list[Statement]:
@@ -41,8 +44,11 @@ def run_ingest_pass(session: Session) -> int:
     total = 0
     for source in sources:
         try:
-            total += len(ingest_source(session, source))
-        except UnknownConnectorType:
+            new_statements = ingest_source(session, source)
+            session.commit()
+            total += len(new_statements)
+        except Exception:
+            session.rollback()
+            logger.exception("ingest failed for source id=%s", source.id)
             continue
-    session.commit()
     return total
