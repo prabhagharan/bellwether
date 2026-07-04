@@ -17,7 +17,11 @@ def login(
     session: Session = Depends(get_session),
 ):
     user = get_user_by_username(session, form.username)
-    if user is None or not verify_password(form.password, user.hashed_password):
+    if (
+        user is None
+        or not verify_password(form.password, user.hashed_password)
+        or not user.is_active
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
