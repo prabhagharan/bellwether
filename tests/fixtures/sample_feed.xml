@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Speeches</title>
+    <link>https://example.test/feed</link>
+    <item>
+      <title>Rates will stay higher for longer</title>
+      <description>The chair signaled a restrictive stance.</description>
+      <link>https://example.test/speech-1</link>
+      <guid>speech-0001</guid>
+      <pubDate>Fri, 04 Jul 2026 14:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Inflation is easing</title>
+      <description>Progress toward the target.</description>
+      <link>https://example.test/speech-2</link>
+      <guid>speech-0002</guid>
+      <pubDate>Fri, 04 Jul 2026 16:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
