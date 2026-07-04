@@ -18,16 +18,32 @@ def test_statements_requires_auth(client):
     assert client.get("/statements").status_code == 401
 
 def test_list_statements_filters(client, auth_headers, db_session):
-    # auth_headers created user "tester"; fetch its id to own the figure
+    from sqlalchemy import select
     from bellwether.repositories.users import get_user_by_username
+    from bellwether.models.statement import Statement
     uid = get_user_by_username(db_session, "tester").id
-    f = _seed_statements(db_session, owner_id=uid)
-    r = client.get(f"/statements?figure_id={f.id}", headers=auth_headers)
-    assert r.status_code == 200
-    body = r.json()
-    assert len(body) == 2
-    assert all("text" in s and s["provenance"] == "primary" for s in body)
+    f1 = _seed_statements(db_session, owner_id=uid)   # figure 1: 2 "new" statements
+    f2 = _seed_statements(db_session, owner_id=uid)   # figure 2: its own source -> 2 more "new" statements
+    # flip ONE of figure 1's statements to a different status
+    stmt = db_session.execute(
+        select(Statement).where(Statement.figure_id == f1.id)
+    ).scalars().first()
+    stmt.status = "reviewed"
+    db_session.flush()
+
+    # figure_id filter must exclude the other figure's statements
+    body1 = client.get(f"/statements?figure_id={f1.id}", headers=auth_headers).json()
+    assert len(body1) == 2
+    assert {s["figure_id"] for s in body1} == {f1.id}
+
+    # unfiltered returns statements from BOTH figures
+    all_body = client.get("/statements", headers=auth_headers).json()
+    assert len(all_body) == 4
     # newest first
-    assert body[0]["published_at"] >= body[1]["published_at"]
-    # status filter
-    assert all(s["status"] == "new" for s in client.get(f"/statements?status=new", headers=auth_headers).json())
+    assert all(all_body[i]["published_at"] >= all_body[i + 1]["published_at"] for i in range(len(all_body) - 1))
+
+    # status filter must genuinely narrow: 3 remain "new", 1 is "reviewed"
+    new_body = client.get("/statements?status=new", headers=auth_headers).json()
+    assert len(new_body) == 3 and all(s["status"] == "new" for s in new_body)
+    reviewed_body = client.get("/statements?status=reviewed", headers=auth_headers).json()
+    assert len(reviewed_body) == 1 and reviewed_body[0]["status"] == "reviewed"
