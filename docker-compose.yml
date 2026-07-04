@@ -1,0 +1,9 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: bellwether
+      POSTGRES_PASSWORD: bellwether
+      POSTGRES_DB: bellwether
+    ports:
+      - "5432:5432"
