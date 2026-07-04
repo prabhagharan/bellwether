@@ -121,8 +121,11 @@ source later. Free-data granularity is coarse, so sub-minute windows are not off
 
 - **Single framework: DSPy**, model-agnostic via LiteLLM. No LangChain/LangGraph —
   every LLM stage is a single call, so orchestration frameworks add nothing here.
-- **Two DSPy modules:** Detect (cheap `detect_model`) and Extract (optimized
-  `extract_model`), both swappable by config; not bound to any one provider.
+- **DSPy modules:** Detect (cheap `detect_model`) and Extract (optimized
+  `extract_model`), both swappable by config; plus a **Discovery** module for source
+  discovery (name disambiguation + source gap-fill), **un-optimized initially** and
+  optimizable later from review-queue byproduct labels. All model-agnostic; not bound to
+  any one provider.
 - **Optimization flywheel:** review-and-correct produces golden sets; a **manual**
   "optimize now" job compiles a new prompt version. A new version is **promoted only if
   it beats the current champion on a frozen held-out set** (champion/challenger).
@@ -145,10 +148,14 @@ source later. Free-data granularity is coarse, so sub-minute windows are not off
 When a user adds a figure (by name), a **discovery** step establishes verified source
 bindings automatically; manual add is always available on top.
 
-- **Automatic (default):** resolve identity against **Wikidata** first — `P856` official
-  website, `P2002` X username, `P2397` YouTube channel — then web-search + LLM fills
-  gaps as *candidates*. Aliases auto-populated from Wikidata (used by the news query and
-  dedup).
+- **Automatic (default):** the **backbone is deterministic** — a structured **Wikidata**
+  lookup (`P856` official website, `P2002` X username, `P2397` YouTube channel) plus
+  aliases auto-populated from Wikidata (used by the news query and dedup). A **DSPy
+  Discovery module (LLM)** handles the fuzzy parts: **disambiguating** which entity the
+  typed name refers to, and **gap-filling** sources Wikidata lacks (via web search),
+  proposed as *candidates* that still pass verification. Un-optimized initially; the
+  review-queue confirm/reject actions are a byproduct label source to optimize it later
+  (symmetric with Detect).
 - **Auto-verify by cross-reference:** a binding is trusted only when independent
   authorities agree (Wikidata + X verified status + official-domain link). Each binding
   gets a `discovery_confidence`.
