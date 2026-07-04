@@ -34,4 +34,14 @@ filterwarnings = [
     # regardless of which hash scheme is actually used. This is unrelated to
     # the bcrypt version-detection issue (bcrypt is pinned <4.1 for that).
     "ignore:'crypt' is deprecated:DeprecationWarning:passlib.utils",
+    # starlette.testclient unconditionally warns (via fastapi.testclient's
+    # `from starlette.testclient import TestClient` re-export, which is where
+    # the stacklevel points) when httpx is the installed HTTP client, nudging
+    # toward an unreleased/unavailable `httpx2` package. Despite the name,
+    # `StarletteDeprecationWarning` subclasses `UserWarning`, not
+    # `DeprecationWarning`. FastAPI's TestClient (used by our API tests) is
+    # built on this exact httpx-backed client, so httpx is the intended,
+    # supported dependency here (per the task brief) -- this is a
+    # library-level nag, not something our code can address.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:UserWarning:fastapi.testclient",
 ]
