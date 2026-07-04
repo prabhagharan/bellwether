@@ -11,6 +11,7 @@ dependencies = [
     "pydantic-settings>=2.2",
     "pyjwt>=2.8",
     "passlib[bcrypt]>=1.7",
+    "bcrypt>=4.0,<4.1",
     "python-multipart>=0.0.9",
 ]
 
@@ -27,3 +28,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+filterwarnings = [
+    # passlib 1.7.4 unconditionally imports the stdlib `crypt` module as one
+    # of its backends; `crypt` has been deprecated since Python 3.11 (PEP 594)
+    # regardless of which hash scheme is actually used. This is unrelated to
+    # the bcrypt version-detection issue (bcrypt is pinned <4.1 for that).
+    "ignore:'crypt' is deprecated:DeprecationWarning:passlib.utils",
+]
