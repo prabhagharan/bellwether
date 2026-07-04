@@ -1,6 +1,11 @@
 import pytest
+from sqlalchemy import delete
 from bellwether.db import engine
 from sqlalchemy.orm import Session
+from bellwether.models.statement import Statement
+from bellwether.models.source import Source
+from bellwether.models.figure import Figure
+from bellwether.models.user import User
 
 
 @pytest.fixture
@@ -15,6 +20,14 @@ def db_session():
         expire_on_commit=False,
         join_transaction_mode="create_savepoint",
     )
+    # Clean slate: the app now commits to a shared dev/test Postgres, and several
+    # tests scan or count whole tables (seed emptiness, ingest counts). Clear the
+    # domain tables in FK order INSIDE this test's transaction so any leftover
+    # committed rows can't cause spurious failures. The teardown rollback discards
+    # these deletes — they never touch data outside the test.
+    for model in (Statement, Source, Figure, User):
+        session.execute(delete(model))
+    session.flush()
     try:
         yield session
     finally:

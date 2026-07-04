@@ -1,5 +1,7 @@
 # bellwether Plan 2 — Ingestion & Watchlist Implementation Plan
 
+> **Status: ✅ Complete** — merged to `main` (2026-07-04) via subagent-driven development. All 8 tasks implemented, task- and whole-branch-reviewed. Post-merge, manual end-to-end testing caught a real bug (`get_session` never committed → API writes didn't persist), fixed in `750dad9`; test isolation hardened so a shared dev DB can't cause spurious failures. Suite: 33/33 passing; verified live (watchlist → ingest → statements). Checkboxes left as the original plan of record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let a user manage a watchlist of figures and their sources via the authenticated API, and ingest real statements from RSS sources into a deduplicated, timestamped `statements` table.
