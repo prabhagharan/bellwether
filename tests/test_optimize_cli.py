@@ -2,7 +2,6 @@ import pytest
 import bellwether.optimize as cli
 from bellwether.eval.optimize import OptimizeResult
 from bellwether.programs import save_program
-from bellwether.models.dspy_program import DspyProgram
 from bellwether.models.eval_run import EvalRun
 
 
