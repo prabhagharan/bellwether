@@ -28,6 +28,14 @@ def db_session():
     for model in (Statement, Source, Figure, User):
         session.execute(delete(model))
     session.flush()
+    # Reset the users sequence so the first user gets id=1
+    from sqlalchemy import text
+    session.execute(text("SELECT setval('users_id_seq', 1, false)"))
+    session.flush()
+    # Create a test user for tests that need owner_id references
+    test_user = User(username="test_user", hashed_password="test_hash", is_active=True)
+    session.add(test_user)
+    session.flush()
     try:
         yield session
     finally:
