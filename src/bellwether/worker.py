@@ -112,15 +112,14 @@ def make_resolve_stage(resolver: Resolver, windows: list[tuple[str, "timedelta"]
                 outcome = resolver.resolve(
                     entity, ResolveContext(figure_name=figure.name if figure else "", snippet=snippet)
                 )
-                session.add(EntitySymbol(
-                    normalized_entity=normalize_entity(entity), symbol=outcome.symbol,
-                    asset_class=outcome.asset_class, measurable=outcome.measurable,
-                    instrument_name=outcome.instrument_name, confidence=outcome.confidence, source="llm",
-                ))
                 try:
-                    session.flush()
-                except IntegrityError:  # concurrent worker cached it first
-                    session.rollback()
+                    with session.begin_nested():
+                        session.add(EntitySymbol(
+                            normalized_entity=normalize_entity(entity), symbol=outcome.symbol,
+                            asset_class=outcome.asset_class, measurable=outcome.measurable,
+                            instrument_name=outcome.instrument_name, confidence=outcome.confidence, source="llm",
+                        ))
+                except IntegrityError:  # concurrent worker cached it first — only the savepoint rolls back
                     outcome = _cached_outcome(session, entity) or outcome
 
             resolution = Resolution(
