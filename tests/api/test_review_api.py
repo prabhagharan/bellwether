@@ -22,8 +22,27 @@ def _seed_extracted(db_session, owner_id, text="Tesla will grow production."):
     return st
 
 
+def _seed_statement(db_session, owner_id, status, text="Rates will rise."):
+    f = Figure(name="Jerome Powell", type="individual", aliases=[], owner_id=owner_id); db_session.add(f); db_session.flush()
+    s = Source(figure_id=f.id, connector_type="rss", config={}, provenance="primary", origin="manual", owner_id=owner_id)
+    db_session.add(s); db_session.flush()
+    st = Statement(figure_id=f.id, source_id=s.id, external_id="e", text=text, url=None, provenance="primary",
+                   published_at=datetime(2026, 7, 1, tzinfo=timezone.utc), status=status); db_session.add(st); db_session.flush()
+    return st
+
+
 def test_review_requires_auth(client):
     assert client.get("/review/queue?module=extract").status_code == 401
+
+
+def test_detect_queue_excludes_undetected_statements(client, auth_headers, db_session):
+    """The detect queue lists processed-but-unlabeled statements, never pre-detect ones (spec §5)."""
+    uid = get_user_by_username(db_session, "tester").id
+    undetected = _seed_statement(db_session, uid, status="new", text="Not yet detected.")
+    detected = _seed_statement(db_session, uid, status="detected", text="Already detected, needs a label.")
+    ids = {item["statement_id"] for item in client.get("/review/queue?module=detect", headers=auth_headers).json()}
+    assert detected.id in ids          # processed + unlabeled -> in the queue
+    assert undetected.id not in ids    # status="new" -> excluded
 
 
 def test_queue_and_confirm(client, auth_headers, db_session):

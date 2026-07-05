@@ -27,6 +27,8 @@ def review_queue(module: str = Query(pattern="^(extract|detect)$"),
          .where(Figure.owner_id == user.id, labelled.id.is_(None)))
     if module == "extract":
         q = q.where(Statement.status.in_(("extracted", "resolved")))
+    else:  # detect: only statements the pipeline has already detected (spec §5), never pre-detect
+        q = q.where(Statement.status.notin_(("new", "detecting")))
     q = q.order_by(Statement.published_at.desc()).limit(limit)
     items = []
     for st, fig in session.execute(q).all():
