@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     relevance_threshold: float = 0.5
     worker_poll_interval_seconds: float = 5.0
     worker_stale_reclaim_seconds: float = 300.0
+    resolve_model: str = "anthropic/claude-haiku-4-5"
+    resolve_max_attempts: int = 3
+    resolve_confidence_threshold: float = 0.5
+    measure_windows: str = "5m,1h,1d"
+    measure_baseline_bars: int = 20
 
 
 @lru_cache
