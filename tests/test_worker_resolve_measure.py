@@ -144,6 +144,10 @@ def test_measure_scales_lookback_to_window_and_baseline(db_session):
     make_measure_stage(stub, baseline_bars=20).process(db_session, imp)
     assert stub.last_call is not None
     assert stub.last_call["start"] <= imp.event_at - timedelta(days=20)
+    # The fetch end must extend past due_at so the first bar at/after due_at is included
+    # even when it lands on a coarse-bar boundary or across a weekend (regression: a
+    # `due_at + 1s` end fetches no "after" bar for daily data, so the 1d window never measures).
+    assert stub.last_call["end"] >= imp.due_at + timedelta(days=1)
 
 
 def test_end_to_end_resolve_then_measure():

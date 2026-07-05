@@ -160,7 +160,10 @@ def make_measure_stage(market: MarketData, baseline_bars: int) -> Stage:
         # Fetch a series that brackets the event and its window, with lookback for the baseline.
         lookback = parse_window(impact.window) * baseline_bars * 3  # generous: markets are closed nights/weekends
         start = impact.event_at - max(timedelta(days=1), lookback)
-        end = impact.due_at + timedelta(seconds=1)
+        # Pad the end so the first bar at/after due_at is fetched even when it lands on a
+        # coarse-bar boundary or across a weekend/holiday (e.g. a daily bar is stamped at
+        # 00:00, so the bar "1 day after" a 15:00 event is the next session's bar).
+        end = impact.due_at + max(window_delta, timedelta(days=4))
         series = market.price_series(impact.symbol, impact.asset_class, start, end, impact.window)
         # (a MarketDataError from the adapter propagates -> run_worker rollback -> reclaim retry)
         point = compute_impact(series, impact.event_at, window_delta, baseline_bars)
