@@ -1,12 +1,10 @@
 import bellwether.api.optimize_api as optimize_api
 from bellwether.eval.optimize import OptimizeResult
 from bellwether.programs import save_program
-from bellwether.models.dspy_program import DspyProgram
-from sqlalchemy import select
 
 
 def test_programs_list_and_promote(client, auth_headers, db_session):
-    p1 = save_program(db_session, "detect", 1, {"a": 1}, holdout_score=0.7, is_champion=False)
+    save_program(db_session, "detect", 1, {"a": 1}, holdout_score=0.7, is_champion=False)
     p2 = save_program(db_session, "detect", 2, {"a": 2}, holdout_score=0.9, is_champion=False)
     db_session.flush()
     listed = client.get("/programs?module=detect", headers=auth_headers).json()
