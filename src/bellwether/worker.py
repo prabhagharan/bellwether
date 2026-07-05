@@ -24,7 +24,7 @@ from bellwether.config import get_settings
 from bellwether.queue import claim_one, reclaim_stale, claim_due_impact, reclaim_stale_impacts
 from bellwether.llm.detect import build_detector
 from bellwether.llm.extract import build_extractor
-from bellwether.market.base import MarketData, MarketDataError
+from bellwether.market.base import MarketData
 from bellwether.measure.impact import compute_impact
 from bellwether.windows import parse_window, parse_windows
 from bellwether.llm.resolve import build_resolver
