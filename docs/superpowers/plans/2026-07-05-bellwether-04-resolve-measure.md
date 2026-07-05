@@ -1,5 +1,7 @@
 # bellwether Plan 4 — Resolve & Measure Implementation Plan
 
+> **Status: ✅ Complete** — merged to `main` (2026-07-05) via subagent-driven development. All 11 tasks implemented TDD-style, each task-reviewed plus a whole-branch review. Fixes applied: the resolve-stage cache-insert rollback scoped to a SAVEPOINT (`begin_nested`) for concurrency; the Measure volume-baseline lookback scaled to `window × baseline_bars`; the `MarketDataError` boundary widened; F401 cleanup. A **live end-to-end run** then caught one more real bug the stub tests couldn't — the Measure fetch `end` was too tight for daily bars, so the `1d` window never measured; fixed by padding `end` past `due_at`, verified live (TSLA 2024-05-01 → +0.67%). Ships **yfinance-only** (CoinGecko deferred behind the registry seam, owner-approved). Suite: 87/87, pristine, `worker.py` ruff-clean. Checkboxes left as the original plan of record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn Plan 3's `extractions` into measured market impact via two more pipeline stages — **Resolve** (entity→symbol, LLM-proposed + yfinance-verified + self-cached) and **Measure** (delayed per-window price impact) — reusing and generalizing Plan 3's worker/queue harness.
