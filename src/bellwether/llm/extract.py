@@ -30,9 +30,10 @@ class Extract(dspy.Module):
 class _ExtractorAdapter:
     """Maps the DSPy Prediction onto the frozen Extractor contract."""
 
-    def __init__(self, module: Extract, model: str):
+    def __init__(self, module: Extract, model: str, version: str):
         self._module = module
         self.model = model
+        self.version = version
 
     def extract(self, statement_text: str) -> ExtractionResult:
         try:
@@ -48,8 +49,11 @@ class _ExtractorAdapter:
         )
 
 
-def build_extractor(lm: dspy.LM | None = None) -> Extractor:
+def build_extractor(lm: dspy.LM | None = None, program_state: dict | None = None,
+                    version: str = "baseline") -> Extractor:
     settings = get_settings()
     module = Extract()
     module.set_lm(lm or make_lm(settings.extract_model))
-    return _ExtractorAdapter(module, settings.extract_model)
+    if program_state is not None:
+        module.load_state(program_state)
+    return _ExtractorAdapter(module, settings.extract_model, version)

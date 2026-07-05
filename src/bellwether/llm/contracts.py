@@ -20,12 +20,14 @@ class ExtractionResult:
 @runtime_checkable
 class Detector(Protocol):
     model: str
+    version: str
     def detect(self, statement_text: str) -> DetectionResult: ...
 
 
 @runtime_checkable
 class Extractor(Protocol):
     model: str
+    version: str
     def extract(self, statement_text: str) -> ExtractionResult: ...
 
 

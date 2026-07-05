@@ -8,6 +8,11 @@ from bellwether.models.extraction import Extraction
 from bellwether.models.resolution import Resolution
 from bellwether.models.entity_symbol import EntitySymbol
 from bellwether.models.impact import Impact
+from bellwether.models.relevance_label import RelevanceLabel
+from bellwether.models.extraction_label import ExtractionLabel
+from bellwether.models.dspy_program import DspyProgram
+from bellwether.models.eval_run import EvalRun
 
 __all__ = ["Base", "User", "Figure", "Source", "Statement", "Detection", "Extraction",
-           "Resolution", "EntitySymbol", "Impact"]
+           "Resolution", "EntitySymbol", "Impact",
+           "RelevanceLabel", "ExtractionLabel", "DspyProgram", "EvalRun"]

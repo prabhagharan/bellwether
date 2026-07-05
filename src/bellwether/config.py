@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     resolve_confidence_threshold: float = 0.5
     measure_windows: str = "5m,1h,1d"
     measure_baseline_bars: int = 20
+    reflection_model: str = "anthropic/claude-sonnet-5"
+    gepa_auto: str = "light"
+    holdout_modulus: int = 5
 
 
 @lru_cache

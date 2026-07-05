@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from bellwether.api.auth import router as auth_router
 from bellwether.api.watchlist import router as watchlist_router
 from bellwether.api.statements import router as statements_router
+from bellwether.api.review import router as review_router
 from bellwether.db import SessionLocal
 from bellwether.seed import seed_admin
 
@@ -19,4 +20,5 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(watchlist_router)
     app.include_router(statements_router)
+    app.include_router(review_router)
     return app
