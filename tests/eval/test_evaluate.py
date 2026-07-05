@@ -11,8 +11,8 @@ from bellwether.eval.evaluate import evaluate_detect, evaluate_extract, EvalResu
 
 
 def _stmt(db_session, text, sid_status="detected"):
-    f = Figure(name="F", type="individual", aliases=[], owner_id=1); db_session.add(f); db_session.flush()
-    s = Source(figure_id=f.id, connector_type="rss", config={}, provenance="primary", origin="manual", owner_id=1)
+    f = Figure(name="F", type="individual", aliases=[], owner_id=None); db_session.add(f); db_session.flush()
+    s = Source(figure_id=f.id, connector_type="rss", config={}, provenance="primary", origin="manual", owner_id=None)
     db_session.add(s); db_session.flush()
     st = Statement(figure_id=f.id, source_id=s.id, external_id=text[:8], text=text, url=None,
                    provenance="primary", published_at=datetime(2026, 7, 1, tzinfo=timezone.utc), status=sid_status)
