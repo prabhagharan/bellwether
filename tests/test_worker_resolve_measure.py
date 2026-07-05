@@ -1,6 +1,8 @@
 # tests/test_worker_resolve_measure.py
-from datetime import datetime, timezone
-from sqlalchemy import select, func
+import pytest
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import select, func, delete
+from bellwether.db import SessionLocal
 from bellwether.models.figure import Figure
 from bellwether.models.source import Source
 from bellwether.models.statement import Statement
@@ -8,9 +10,12 @@ from bellwether.models.extraction import Extraction
 from bellwether.models.resolution import Resolution
 from bellwether.models.entity_symbol import EntitySymbol
 from bellwether.models.impact import Impact
+from bellwether.models.user import User
+from bellwether.models.detection import Detection
 from bellwether.llm.contracts import ResolutionOutcome
+from bellwether.market.base import PriceSeries, PriceBar, MarketDataError
 from bellwether.windows import parse_windows
-from bellwether.worker import make_resolve_stage
+from bellwether.worker import make_measure_stage, make_resolve_stage, run_worker
 
 WINDOWS = parse_windows("5m,1h,1d")
 
@@ -73,3 +78,85 @@ def test_resolve_uses_cache_on_second_entity(db_session):
     stage.process(db_session, st)
     assert calls == []  # cache hit — resolver never invoked
     assert db_session.execute(select(func.count()).select_from(Impact)).scalar_one() == 3
+
+
+class StubMarket:
+    def __init__(self, series=None, exc=None): self._series, self._exc = series, exc
+    def lookup(self, symbol, asset_class): return None
+    def search(self, query): return []
+    def price_series(self, symbol, asset_class, start, end, window):
+        if self._exc is not None:
+            raise self._exc
+        return self._series
+
+
+def _pending_impact(db_session):
+    st, ex = _extracted(db_session, ["Tesla"])
+    st.status = "resolved"
+    r = Resolution(extraction_id=ex.id, entity="Tesla", symbol="TSLA", asset_class="equity", measurable=True)
+    db_session.add(r); db_session.flush()
+    t0 = st.published_at
+    imp = Impact(resolution_id=r.id, symbol="TSLA", asset_class="equity", window="5m",
+                 event_at=t0, due_at=t0 + timedelta(minutes=5), status="measuring")  # pre-claimed
+    db_session.add(imp); db_session.flush()
+    return imp, t0
+
+
+def test_measure_fills_impact(db_session):
+    imp, t0 = _pending_impact(db_session)
+    series = PriceSeries(bars=[
+        PriceBar(ts=t0, price=100.0, volume=10.0),
+        PriceBar(ts=t0 + timedelta(minutes=5), price=110.0, volume=50.0),
+    ])
+    make_measure_stage(StubMarket(series=series), baseline_bars=20).process(db_session, imp)
+    assert imp.status == "measured" and imp.claimed_at is None and imp.measured_at is not None
+    assert imp.price_t0 == 100.0 and imp.price_after == 110.0
+    assert abs(imp.pct_move - 0.10) < 1e-9
+
+
+def test_measure_insufficient_data_is_terminal(db_session):
+    imp, t0 = _pending_impact(db_session)
+    make_measure_stage(StubMarket(series=PriceSeries(bars=[])), baseline_bars=20).process(db_session, imp)
+    assert imp.status == "measure_failed"
+
+
+def test_measure_transient_error_propagates(db_session):
+    imp, t0 = _pending_impact(db_session)
+    stage = make_measure_stage(StubMarket(exc=MarketDataError("timeout")), baseline_bars=20)
+    with pytest.raises(MarketDataError):
+        stage.process(db_session, imp)
+    assert imp.status == "measuring"  # left for reclaim-retry, not burned
+
+
+def test_end_to_end_resolve_then_measure():
+    # real Postgres + SessionLocal; past-dated statement so all windows are already due
+    def _clear():
+        with SessionLocal() as s:
+            for m in (Impact, Resolution, EntitySymbol, Extraction, Detection, Statement, Source, Figure, User):
+                s.execute(delete(m))
+            s.commit()
+    _clear()
+    try:
+        with SessionLocal() as s:
+            f = Figure(name="Elon Musk", type="individual", aliases=[], owner_id=None); s.add(f); s.flush()
+            src = Source(figure_id=f.id, connector_type="rss", config={}, provenance="primary",
+                         origin="manual", owner_id=None); s.add(src); s.flush()
+            t0 = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)  # well in the past -> due
+            st = Statement(figure_id=f.id, source_id=src.id, external_id="e2e", text="Tesla will grow.",
+                           url=None, provenance="primary", published_at=t0, status="extracted"); s.add(st); s.flush()
+            s.add(Extraction(statement_id=st.id, entities=["Tesla"], direction="up", magnitude="small",
+                             confidence=0.5, evidence_quote="Tesla", model="m", version="baseline"))
+            s.commit()
+        resolver = StubResolver({"Tesla": ResolutionOutcome("TSLA", "equity", True, "Tesla Inc", 0.9)})
+        assert run_worker(make_resolve_stage(resolver, WINDOWS), once=True) == 1
+        series = PriceSeries(bars=[
+            PriceBar(ts=t0, price=100.0, volume=10.0),
+            PriceBar(ts=t0 + timedelta(days=1), price=90.0, volume=10.0),
+        ])
+        measured = run_worker(make_measure_stage(StubMarket(series=series), baseline_bars=20), once=True)
+        assert measured == 3  # 5m/1h/1d all due
+        with SessionLocal() as s:
+            statuses = {i.window: i.status for i in s.execute(select(Impact)).scalars()}
+            assert statuses["1d"] == "measured"
+    finally:
+        _clear()

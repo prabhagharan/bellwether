@@ -1,6 +1,6 @@
 # src/bellwether/worker.py
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -22,9 +22,14 @@ import threading
 import time
 from bellwether.db import SessionLocal
 from bellwether.config import get_settings
-from bellwether.queue import claim_one, reclaim_stale
+from bellwether.queue import claim_one, reclaim_stale, claim_due_impact, reclaim_stale_impacts
 from bellwether.llm.detect import build_detector
 from bellwether.llm.extract import build_extractor
+from bellwether.market.base import MarketData, MarketDataError
+from bellwether.measure.impact import compute_impact
+from bellwether.windows import parse_window, parse_windows
+from bellwether.llm.resolve import build_resolver
+from bellwether.market.registry import build_market_data
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +155,37 @@ def make_resolve_stage(resolver: Resolver, windows: list[tuple[str, "timedelta"]
     )
 
 
+def make_measure_stage(market: MarketData, baseline_bars: int) -> Stage:
+    def process(session: Session, impact) -> None:
+        window_delta = parse_window(impact.window)
+        # Fetch a series that brackets the event and its window, with lookback for the baseline.
+        start = impact.event_at - timedelta(days=1)
+        end = impact.due_at + timedelta(seconds=1)
+        series = market.price_series(impact.symbol, impact.asset_class, start, end, impact.window)
+        # (a MarketDataError from the adapter propagates -> run_worker rollback -> reclaim retry)
+        point = compute_impact(series, impact.event_at, window_delta, baseline_bars)
+        if point is None:
+            impact.status = "measure_failed"  # insufficient free data — terminal
+            impact.claimed_at = None
+            session.commit()
+            return
+        impact.price_t0 = point.price_t0
+        impact.price_after = point.price_after
+        impact.pct_move = point.pct_move
+        impact.volume_spike = point.volume_spike
+        impact.status = "measured"
+        impact.measured_at = datetime.now(timezone.utc)
+        impact.claimed_at = None
+        session.commit()
+
+    return Stage(
+        name="measure",
+        claim_next=lambda s: claim_due_impact(s),
+        reclaim=lambda s, secs: reclaim_stale_impacts(s, "measuring", "pending", secs),
+        process=process,
+    )
+
+
 def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None,
                reclaim_interval_seconds: float | None = None,
                once: bool = False, stop_event: "threading.Event | None" = None) -> int:
@@ -196,12 +232,16 @@ def _build_stage(name: str) -> Stage:
     settings = get_settings()
     if name == "detect":
         return make_detect_stage(build_detector(), settings.relevance_threshold)
-    return make_extract_stage(build_extractor())
+    if name == "extract":
+        return make_extract_stage(build_extractor())
+    if name == "resolve":
+        return make_resolve_stage(build_resolver(), parse_windows(settings.measure_windows))
+    return make_measure_stage(build_market_data(), settings.measure_baseline_bars)
 
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="bellwether.worker")
-    parser.add_argument("stage", choices=["detect", "extract"])
+    parser.add_argument("stage", choices=["detect", "extract", "resolve", "measure"])
     parser.add_argument("--once", action="store_true",
                         help="drain the queue once and exit (default: run as a daemon)")
     args = parser.parse_args(argv)
