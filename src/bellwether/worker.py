@@ -24,64 +24,59 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Stage:
     name: str
-    claim_from: str
-    claim_to: str
-    process: Callable[[Session, Statement], None]
+    claim_next: Callable[[Session], object | None]
+    reclaim: Callable[[Session, float], int]
+    process: Callable[[Session, object], None]
 
 
 def make_detect_stage(detector: Detector, threshold: float) -> Stage:
-    def process(session: Session, statement: Statement) -> None:
+    def process(session: Session, statement) -> None:
         result = detector.detect(statement.text)
         session.add(Detection(
-            statement_id=statement.id,
-            is_relevant=result.is_relevant,
-            score=result.score,
-            model=detector.model,
-            version="baseline",
+            statement_id=statement.id, is_relevant=result.is_relevant, score=result.score,
+            model=detector.model, version="baseline",
         ))
         statement.status = "detected" if (result.is_relevant and result.score >= threshold) else "irrelevant"
         statement.claimed_at = None
         session.commit()
 
-    return Stage(name="detect", claim_from="new", claim_to="detecting", process=process)
+    return Stage(
+        name="detect",
+        claim_next=lambda s: claim_one(s, "new", "detecting"),
+        reclaim=lambda s, secs: reclaim_stale(s, "detecting", "new", secs),
+        process=process,
+    )
 
 
 def make_extract_stage(extractor: Extractor) -> Stage:
-    def process(session: Session, statement: Statement) -> None:
+    def process(session: Session, statement) -> None:
         try:
             result = extractor.extract(statement.text)
         except ExtractionParseError:
-            # The LM output could not be parsed/validated into the signature's typed
-            # fields — a permanently-malformed extraction. Terminal: do not retry.
             statement.status = "extract_failed"
             statement.claimed_at = None
             session.commit()
             return
-        # Any other exception (transient provider timeout/5xx, etc.) propagates to
-        # run_worker, which rolls back and leaves the row in-flight for reclaim-based
-        # retry — matching Detect's retryable semantics.
-        # Verbatim-substring guard at the stage boundary — outside the module, so no
-        # extractor implementation can ever land a fabricated quote.
         if not is_verbatim(result.evidence_quote, statement.text):
             statement.status = "extract_failed"
             statement.claimed_at = None
             session.commit()
             return
         session.add(Extraction(
-            statement_id=statement.id,
-            entities=result.entities,
-            direction=result.direction,
-            magnitude=result.magnitude,
-            confidence=result.confidence,
-            evidence_quote=result.evidence_quote,
-            model=extractor.model,
-            version="baseline",
+            statement_id=statement.id, entities=result.entities, direction=result.direction,
+            magnitude=result.magnitude, confidence=result.confidence,
+            evidence_quote=result.evidence_quote, model=extractor.model, version="baseline",
         ))
         statement.status = "extracted"
         statement.claimed_at = None
         session.commit()
 
-    return Stage(name="extract", claim_from="detected", claim_to="extracting", process=process)
+    return Stage(
+        name="extract",
+        claim_next=lambda s: claim_one(s, "detected", "extracting"),
+        reclaim=lambda s, secs: reclaim_stale(s, "extracting", "detected", secs),
+        process=process,
+    )
 
 
 def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None,
@@ -93,35 +88,29 @@ def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None
     if reclaim_interval_seconds is None:
         reclaim_interval_seconds = settings.worker_stale_reclaim_seconds
 
-    # Startup crash-recovery: return rows stuck in this stage's in-flight marker.
     with session_factory() as session:
-        reclaim_stale(session, stage.claim_to, stage.claim_from,
-                      settings.worker_stale_reclaim_seconds)
+        stage.reclaim(session, settings.worker_stale_reclaim_seconds)
     last_reclaim = time.monotonic()
 
     processed = 0
     while True:
         if stop_event is not None and stop_event.is_set():
             break
-        # Periodic in-loop reclaim: a single always-on daemon must also recover rows
-        # stuck in-flight without waiting for a restart. Safe to run anytime — it only
-        # touches rows older than the cutoff.
         if time.monotonic() - last_reclaim >= reclaim_interval_seconds:
             with session_factory() as session:
-                reclaim_stale(session, stage.claim_to, stage.claim_from,
-                              settings.worker_stale_reclaim_seconds)
+                stage.reclaim(session, settings.worker_stale_reclaim_seconds)
             last_reclaim = time.monotonic()
         with session_factory() as session:
-            statement = claim_one(session, stage.claim_from, stage.claim_to)
-            if statement is not None:
+            row = stage.claim_next(session)
+            if row is not None:
                 try:
-                    stage.process(session, statement)
+                    stage.process(session, row)
                     processed += 1
                 except Exception:
-                    session.rollback()  # claim already committed; row reclaimed later
-                    logger.exception("stage %s failed for statement id=%s",
-                                     stage.name, statement.id)
-        if statement is None:
+                    session.rollback()
+                    logger.exception("stage %s failed for row id=%s",
+                                     stage.name, getattr(row, "id", "?"))
+        if row is None:
             if once:
                 break
             if stop_event is not None:
