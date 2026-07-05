@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 import pandas as pd
 from bellwether.market.yfinance_adapter import _series_from_history
 from bellwether.market.base import PriceSeries

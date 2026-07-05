@@ -81,10 +81,13 @@ def test_resolve_uses_cache_on_second_entity(db_session):
 
 
 class StubMarket:
-    def __init__(self, series=None, exc=None): self._series, self._exc = series, exc
+    def __init__(self, series=None, exc=None):
+        self._series, self._exc = series, exc
+        self.last_call = None
     def lookup(self, symbol, asset_class): return None
     def search(self, query): return []
     def price_series(self, symbol, asset_class, start, end, window):
+        self.last_call = dict(symbol=symbol, asset_class=asset_class, start=start, end=end, window=window)
         if self._exc is not None:
             raise self._exc
         return self._series
@@ -126,6 +129,21 @@ def test_measure_transient_error_propagates(db_session):
     with pytest.raises(MarketDataError):
         stage.process(db_session, imp)
     assert imp.status == "measuring"  # left for reclaim-retry, not burned
+
+
+def test_measure_scales_lookback_to_window_and_baseline(db_session):
+    st, ex = _extracted(db_session, ["Tesla"])
+    st.status = "resolved"
+    r = Resolution(extraction_id=ex.id, entity="Tesla", symbol="TSLA", asset_class="equity", measurable=True)
+    db_session.add(r); db_session.flush()
+    t0 = st.published_at
+    imp = Impact(resolution_id=r.id, symbol="TSLA", asset_class="equity", window="1d",
+                 event_at=t0, due_at=t0 + timedelta(days=1), status="measuring")  # pre-claimed
+    db_session.add(imp); db_session.flush()
+    stub = StubMarket(series=PriceSeries(bars=[]))
+    make_measure_stage(stub, baseline_bars=20).process(db_session, imp)
+    assert stub.last_call is not None
+    assert stub.last_call["start"] <= imp.event_at - timedelta(days=20)
 
 
 def test_end_to_end_resolve_then_measure():

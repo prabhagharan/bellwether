@@ -5,7 +5,6 @@ from typing import Callable
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from bellwether.models.statement import Statement
 from bellwether.models.detection import Detection
 from bellwether.models.extraction import Extraction
 from bellwether.models.figure import Figure
@@ -159,7 +158,8 @@ def make_measure_stage(market: MarketData, baseline_bars: int) -> Stage:
     def process(session: Session, impact) -> None:
         window_delta = parse_window(impact.window)
         # Fetch a series that brackets the event and its window, with lookback for the baseline.
-        start = impact.event_at - timedelta(days=1)
+        lookback = parse_window(impact.window) * baseline_bars * 3  # generous: markets are closed nights/weekends
+        start = impact.event_at - max(timedelta(days=1), lookback)
         end = impact.due_at + timedelta(seconds=1)
         series = market.price_series(impact.symbol, impact.asset_class, start, end, impact.window)
         # (a MarketDataError from the adapter propagates -> run_worker rollback -> reclaim retry)

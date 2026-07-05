@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import timezone
 import yfinance as yf
 from bellwether.market.base import (
     InstrumentInfo, SymbolCandidate, PriceBar, PriceSeries, MarketDataError,
@@ -24,9 +24,9 @@ class YFinanceAdapter:
     def lookup(self, symbol: str, asset_class: str) -> InstrumentInfo | None:
         try:
             info = yf.Ticker(symbol).info
+            name = info.get("longName") or info.get("shortName")
         except Exception as exc:  # network/parse — transient
             raise MarketDataError(str(exc)) from exc
-        name = info.get("longName") or info.get("shortName")
         if not name:
             return None
         return InstrumentInfo(symbol=symbol, name=name, asset_class=asset_class)
@@ -34,14 +34,14 @@ class YFinanceAdapter:
     def search(self, query: str) -> list[SymbolCandidate]:
         try:
             quotes = yf.Search(query).quotes
+            out: list[SymbolCandidate] = []
+            for q in quotes:
+                sym = q.get("symbol")
+                if sym:
+                    out.append(SymbolCandidate(symbol=sym,
+                                               name=q.get("longname") or q.get("shortname") or ""))
         except Exception as exc:
             raise MarketDataError(str(exc)) from exc
-        out: list[SymbolCandidate] = []
-        for q in quotes:
-            sym = q.get("symbol")
-            if sym:
-                out.append(SymbolCandidate(symbol=sym,
-                                           name=q.get("longname") or q.get("shortname") or ""))
         return out
 
     def price_series(self, symbol, asset_class, start, end, window) -> PriceSeries:
