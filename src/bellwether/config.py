@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60
     admin_username: str
     admin_password: str
+    detect_model: str = "anthropic/claude-haiku-4-5"
+    extract_model: str = "anthropic/claude-sonnet-5"
+    relevance_threshold: float = 0.5
+    worker_poll_interval_seconds: float = 5.0
+    worker_stale_reclaim_seconds: float = 300.0
 
 
 @lru_cache
