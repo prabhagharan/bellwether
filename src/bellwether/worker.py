@@ -1,12 +1,20 @@
 # src/bellwether/worker.py
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Callable
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from bellwether.models.statement import Statement
 from bellwether.models.detection import Detection
 from bellwether.models.extraction import Extraction
-from bellwether.llm.contracts import Detector, Extractor, ExtractionParseError
+from bellwether.models.figure import Figure
+from bellwether.models.resolution import Resolution
+from bellwether.models.entity_symbol import EntitySymbol
+from bellwether.models.impact import Impact
+from bellwether.llm.contracts import Detector, Extractor, ExtractionParseError, Resolver, ResolveContext, ResolutionOutcome
 from bellwether.llm.guard import is_verbatim
+from bellwether.llm.resolve import normalize_entity
 import argparse
 import logging
 import signal
@@ -75,6 +83,70 @@ def make_extract_stage(extractor: Extractor) -> Stage:
         name="extract",
         claim_next=lambda s: claim_one(s, "detected", "extracting"),
         reclaim=lambda s, secs: reclaim_stale(s, "extracting", "detected", secs),
+        process=process,
+    )
+
+
+def _cached_outcome(session: Session, entity: str) -> ResolutionOutcome | None:
+    row = session.execute(
+        select(EntitySymbol).where(EntitySymbol.normalized_entity == normalize_entity(entity))
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    return ResolutionOutcome(row.symbol, row.asset_class, row.measurable,
+                             row.instrument_name, row.confidence)
+
+
+def make_resolve_stage(resolver: Resolver, windows: list[tuple[str, "timedelta"]]) -> Stage:
+    def process(session: Session, statement) -> None:
+        extraction = session.execute(
+            select(Extraction).where(Extraction.statement_id == statement.id)
+        ).scalar_one_or_none()
+        entities = list(extraction.entities) if extraction is not None else []
+        figure = session.get(Figure, statement.figure_id)
+        snippet = statement.text[:200]
+
+        for entity in entities:
+            outcome = _cached_outcome(session, entity)
+            if outcome is None:
+                outcome = resolver.resolve(
+                    entity, ResolveContext(figure_name=figure.name if figure else "", snippet=snippet)
+                )
+                session.add(EntitySymbol(
+                    normalized_entity=normalize_entity(entity), symbol=outcome.symbol,
+                    asset_class=outcome.asset_class, measurable=outcome.measurable,
+                    instrument_name=outcome.instrument_name, confidence=outcome.confidence, source="llm",
+                ))
+                try:
+                    session.flush()
+                except IntegrityError:  # concurrent worker cached it first
+                    session.rollback()
+                    outcome = _cached_outcome(session, entity) or outcome
+
+            resolution = Resolution(
+                extraction_id=extraction.id, entity=entity, symbol=outcome.symbol,
+                asset_class=outcome.asset_class, measurable=outcome.measurable,
+            )
+            session.add(resolution)
+            session.flush()  # need resolution.id for the impacts
+
+            if outcome.measurable:
+                for name, delta in windows:
+                    session.add(Impact(
+                        resolution_id=resolution.id, symbol=outcome.symbol,
+                        asset_class=outcome.asset_class, window=name,
+                        event_at=statement.published_at, due_at=statement.published_at + delta,
+                        status="pending",
+                    ))
+
+        statement.status = "resolved"
+        statement.claimed_at = None
+        session.commit()
+
+    return Stage(
+        name="resolve",
+        claim_next=lambda s: claim_one(s, "extracted", "resolving"),
+        reclaim=lambda s, secs: reclaim_stale(s, "resolving", "extracted", secs),
         process=process,
     )
 
