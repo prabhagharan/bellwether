@@ -133,7 +133,7 @@ DSPy `Example`s from the **train** labels: Detect → `Example(statement_text, i
 5. **Promote iff** `challenger.holdout_score > champion.holdout_score`: set the challenger `is_champion=true`, demote the old. Otherwise store unpromoted. Record `eval_runs` for both.
 6. Return `{challenger_version, challenger_holdout, champion_holdout, promoted}`.
 
-`optimize` is exposed as an API endpoint and an internal function (heavy; also runnable as a CLI). Real GEPA runs live; the **promotion decision** (`promote_if_better`) is a pure function, unit-tested.
+`optimize` is a manually-triggered CLI operation (`python -m bellwether.optimize run <module>`) plus an internal function — **not** an HTTP endpoint (user decision 2026-07-05: optimization + versioning is a deliberate operator action, run in the terminal, not exposed as an API). Real GEPA runs live; the **promotion decision** (`promote_if_better`) is a pure function, unit-tested.
 
 ## 8. The champion-loading seam (modifies Plan 3)
 
@@ -149,13 +149,18 @@ The payoff of the frozen `build_*()` factories:
   1. **Invariance:** compute a Track-A score for a labeled set; add/alter/remove `impacts` rows; recompute — the score is **unchanged**.
   2. **Import boundary:** assert the `eval` package's modules do not reference `Impact`/`Resolution` (module-attribute / source check).
 
-## 10. API surface (additions)
+## 10. Interfaces (additions)
 
-All authenticated. Owner-scope the review queue by figure ownership; programs/eval/optimize are global (single-tenant).
-- Review: `GET /review/queue`, `POST /review/{statement_id}` (§5).
-- Optimize: `POST /optimize/{module}` → runs §7.3, returns the result.
-- Programs: `GET /programs?module=` (version history: version, holdout_score, is_champion, created_at); `POST /programs/{id}/promote` (set champion / rollback).
-- Eval: `GET /eval_runs?module=` (scoreboard history).
+**API (authenticated):** only the interactive human loop is HTTP.
+- Review: `GET /review/queue`, `POST /review/{statement_id}` (§5). Owner-scoped by figure ownership.
+
+**CLI (operator, terminal-only — no HTTP):** optimization + program versioning are a manually-triggered tool `python -m bellwether.optimize`, matching the worker CLI (`python -m bellwether.worker <stage>`). Subcommands:
+- `run <detect|extract>` → runs §7.3 (GEPA compile → held-out eval → promote iff better), prints the result.
+- `programs [--module M]` → version history (newest first; `*` marks the champion).
+- `promote <program_id>` → set champion (promote / rollback).
+- `evals [--module M]` → `eval_runs` scoreboard.
+
+(A read-only programs/eval HTTP surface for the Plan-7 dashboard can be added later if the UI needs it; v1 is CLI-only.)
 
 ## 11. Configuration (env)
 
