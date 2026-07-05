@@ -14,6 +14,7 @@ dependencies = [
     "bcrypt>=4.0,<4.1",
     "python-multipart>=0.0.9",
     "feedparser>=6.0",
+    "dspy>=2.5",
 ]
 
 [project.optional-dependencies]
