@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from bellwether.models.statement import Statement
+from bellwether.models.impact import Impact
 
 
 def claim_one(session: Session, from_status: str, to_status: str) -> Statement | None:
@@ -38,6 +39,41 @@ def reclaim_stale(session: Session, in_status: str, to_status: str,
     result = session.execute(
         update(Statement)
         .where(Statement.status == in_status, Statement.claimed_at < cutoff)
+        .values(status=to_status, claimed_at=None)
+    )
+    session.commit()
+    return result.rowcount
+
+
+def claim_due_impact(session: Session, to_status: str = "measuring") -> Impact | None:
+    """Claim the oldest-due `pending` impact whose window has elapsed.
+
+    Same lock-then-release discipline as claim_one, with an added `due_at <= now()`
+    filter so future windows aren't claimed early.
+    """
+    now = datetime.now(timezone.utc)
+    impact = session.execute(
+        select(Impact)
+        .where(Impact.status == "pending", Impact.due_at <= now)
+        .order_by(Impact.due_at)
+        .with_for_update(skip_locked=True)
+        .limit(1)
+    ).scalar_one_or_none()
+    if impact is None:
+        return None
+    impact.status = to_status
+    impact.claimed_at = now
+    session.commit()
+    return impact
+
+
+def reclaim_stale_impacts(session: Session, in_status: str, to_status: str,
+                          older_than_seconds: float) -> int:
+    """Reset impacts stuck in an in-flight status past the cutoff (crash recovery)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+    result = session.execute(
+        update(Impact)
+        .where(Impact.status == in_status, Impact.claimed_at < cutoff)
         .values(status=to_status, claimed_at=None)
     )
     session.commit()
