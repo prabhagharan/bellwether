@@ -1,5 +1,7 @@
 # bellwether Plan 3 — LLM Layer (Detect + Extract) & Queue Harness Implementation Plan
 
+> **Status: ✅ Complete** — merged to `main` (2026-07-05) via subagent-driven development. All 9 tasks implemented TDD-style, each task-reviewed plus a whole-branch review. A two-round final-review fix pass then (1) added periodic stale-reclaim in the worker loop, (2) made transient Extract errors retryable — terminal `extract_failed` only on a guard failure or a DSPy parse error, and (3) restored the DSPy-free stage layer via a contract-level `ExtractionParseError` translated inside the adapter. Suite: 59/59 passing, pristine; verified live end-to-end through real Claude models (Haiku detect + Sonnet 5 extract; the verbatim-substring guard held). Checkboxes left as the original plan of record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn ingested `statements` into structured market signals via two DSPy LLM stages — Detect (cheap relevance gate) and Extract (structured signal) — driven by a generic Postgres `FOR UPDATE SKIP LOCKED` worker/queue harness, with a code-enforced verbatim-substring guard on every extracted quote.
