@@ -3,13 +3,12 @@ import threading
 from unittest.mock import patch
 from datetime import datetime, timezone
 from sqlalchemy import select, func
-from dspy.utils.exceptions import AdapterParseError
 from bellwether.models.figure import Figure
 from bellwether.models.source import Source
 from bellwether.models.statement import Statement
 from bellwether.models.detection import Detection
 from bellwether.models.extraction import Extraction
-from bellwether.llm.contracts import DetectionResult, ExtractionResult
+from bellwether.llm.contracts import DetectionResult, ExtractionResult, ExtractionParseError
 from bellwether.worker import make_detect_stage, make_extract_stage
 
 
@@ -78,14 +77,9 @@ def test_extract_stage_fails_on_non_verbatim_quote(db_session):
     assert n == 0  # no row written for a non-verbatim quote
 
 
-class _FakeSignature:
-    output_fields = {}
-
-
 def test_extract_stage_fails_terminal_on_parse_error(db_session):
     st = _statement(db_session, "anything", status="extracting")
-    stage = make_extract_stage(StubExtractor(exc=AdapterParseError(
-        adapter_name="ChatAdapter", signature=_FakeSignature(), lm_response="garbled")))
+    stage = make_extract_stage(StubExtractor(exc=ExtractionParseError("garbled")))
     stage.process(db_session, st)
     assert st.status == "extract_failed"
     n = db_session.execute(select(func.count()).select_from(Extraction)

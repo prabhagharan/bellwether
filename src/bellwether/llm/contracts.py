@@ -27,3 +27,9 @@ class Detector(Protocol):
 class Extractor(Protocol):
     model: str
     def extract(self, statement_text: str) -> ExtractionResult: ...
+
+
+class ExtractionParseError(Exception):
+    """Raised by an Extractor when the model output cannot be parsed/validated into
+    an ExtractionResult. A terminal condition (no retry); paradigm-agnostic so the
+    stage layer never depends on a specific LLM library's exception types."""

@@ -5,9 +5,8 @@ from sqlalchemy.orm import Session
 from bellwether.models.statement import Statement
 from bellwether.models.detection import Detection
 from bellwether.models.extraction import Extraction
-from bellwether.llm.contracts import Detector, Extractor
+from bellwether.llm.contracts import Detector, Extractor, ExtractionParseError
 from bellwether.llm.guard import is_verbatim
-from dspy.utils.exceptions import AdapterParseError
 import argparse
 import logging
 import signal
@@ -51,7 +50,7 @@ def make_extract_stage(extractor: Extractor) -> Stage:
     def process(session: Session, statement: Statement) -> None:
         try:
             result = extractor.extract(statement.text)
-        except AdapterParseError:
+        except ExtractionParseError:
             # The LM output could not be parsed/validated into the signature's typed
             # fields — a permanently-malformed extraction. Terminal: do not retry.
             statement.status = "extract_failed"

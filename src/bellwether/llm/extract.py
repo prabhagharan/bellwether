@@ -1,8 +1,9 @@
 from typing import Literal
 import dspy
+from dspy.utils.exceptions import AdapterParseError
 from bellwether.config import get_settings
 from bellwether.llm.config import make_lm
-from bellwether.llm.contracts import ExtractionResult, Extractor
+from bellwether.llm.contracts import ExtractionResult, ExtractionParseError, Extractor
 
 
 class ExtractSig(dspy.Signature):
@@ -34,7 +35,10 @@ class _ExtractorAdapter:
         self.model = model
 
     def extract(self, statement_text: str) -> ExtractionResult:
-        pred = self._module(statement_text=statement_text)
+        try:
+            pred = self._module(statement_text=statement_text)
+        except AdapterParseError as exc:
+            raise ExtractionParseError(str(exc)) from exc
         return ExtractionResult(
             entities=list(pred.entities),
             direction=str(pred.direction),
