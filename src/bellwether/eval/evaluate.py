@@ -7,7 +7,7 @@ from bellwether.models.extraction_label import ExtractionLabel
 from bellwether.models.eval_run import EvalRun
 from bellwether.eval.metrics import score_detection, score_extraction, GoldExtraction
 
-# Firewall: this module imports Statement + labels + metrics only — never Impact/Resolution.
+# Firewall: this module imports Statement + labels + metrics only (no market models).
 
 
 @dataclass(frozen=True)
