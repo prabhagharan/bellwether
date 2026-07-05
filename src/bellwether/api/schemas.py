@@ -49,3 +49,22 @@ class StatementRead(BaseModel):
     provenance: str
     published_at: datetime
     status: str
+
+
+class ExtractionCorrect(BaseModel):
+    direction: str
+    magnitude: str
+    entities: list[str]
+    evidence_quote: str
+
+
+class ReviewSubmit(BaseModel):
+    is_relevant: bool
+    extraction: ExtractionCorrect | None = None
+
+
+class ReviewQueueItem(BaseModel):
+    statement_id: int
+    text: str
+    figure_name: str
+    current_extraction: dict | None
