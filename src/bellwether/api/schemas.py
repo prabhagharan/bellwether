@@ -68,3 +68,30 @@ class ReviewQueueItem(BaseModel):
     text: str
     figure_name: str
     current_extraction: dict | None
+
+
+class ProgramRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    module: str
+    version: int
+    holdout_score: float | None
+    is_champion: bool
+
+
+class EvalRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    module: str
+    split: str
+    metric: str
+    score: float
+    n: int
+
+
+class OptimizeRead(BaseModel):
+    module: str
+    version: int
+    challenger_holdout: float
+    champion_holdout: float
+    promoted: bool
