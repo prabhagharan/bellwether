@@ -80,3 +80,64 @@ def test_extract_stage_fails_on_extractor_error(db_session):
     stage = make_extract_stage(StubExtractor(exc=ValueError("boom")))
     stage.process(db_session, st)
     assert st.status == "extract_failed"
+
+
+import pytest
+from sqlalchemy import delete
+from bellwether.db import SessionLocal
+from bellwether.models.user import User
+from bellwether.worker import make_detect_stage, make_extract_stage, run_worker
+from bellwether.llm.contracts import DetectionResult, ExtractionResult
+
+
+def _clear_real():
+    with SessionLocal() as s:
+        for m in (Extraction, Detection, Statement, Source, Figure, User):
+            s.execute(delete(m))
+        s.commit()
+
+
+@pytest.fixture
+def clean_db():
+    _clear_real()
+    yield
+    _clear_real()
+
+
+def _seed_new(text):
+    with SessionLocal() as s:
+        f = Figure(name="F", type="individual", aliases=[], owner_id=None)
+        s.add(f); s.flush()
+        src = Source(figure_id=f.id, connector_type="rss", config={},
+                     provenance="primary", origin="manual", owner_id=None)
+        s.add(src); s.flush()
+        st = Statement(figure_id=f.id, source_id=src.id, external_id="e", text=text,
+                       url=None, provenance="primary",
+                       published_at=datetime(2026, 7, 1, tzinfo=timezone.utc), status="new")
+        s.add(st); s.flush()
+        s.commit()
+        return st.id
+
+
+def test_run_worker_once_drains_detect_queue(clean_db):
+    _seed_new("rates will rise")
+    stage = make_detect_stage(StubDetector(DetectionResult(True, 0.9)), threshold=0.5)
+    processed = run_worker(stage, once=True)
+    assert processed == 1
+    with SessionLocal() as s:
+        st = s.execute(select(Statement)).scalar_one()
+        assert st.status == "detected"
+
+
+def test_end_to_end_detect_then_extract(clean_db):
+    sid = _seed_new("Tesla will grow next quarter.")
+    detect = make_detect_stage(StubDetector(DetectionResult(True, 0.9)), threshold=0.5)
+    extract = make_extract_stage(StubExtractor(
+        ExtractionResult(["TSLA"], "up", "moderate", 0.8, "Tesla will grow")))
+    assert run_worker(detect, once=True) == 1
+    assert run_worker(extract, once=True) == 1
+    with SessionLocal() as s:
+        st = s.get(Statement, sid)
+        assert st.status == "extracted"
+        assert s.execute(select(func.count()).select_from(Detection)).scalar_one() == 1
+        assert s.execute(select(func.count()).select_from(Extraction)).scalar_one() == 1
