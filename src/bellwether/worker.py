@@ -7,10 +7,12 @@ from bellwether.models.detection import Detection
 from bellwether.models.extraction import Extraction
 from bellwether.llm.contracts import Detector, Extractor
 from bellwether.llm.guard import is_verbatim
+from dspy.utils.exceptions import AdapterParseError
 import argparse
 import logging
 import signal
 import threading
+import time
 from bellwether.db import SessionLocal
 from bellwether.config import get_settings
 from bellwether.queue import claim_one, reclaim_stale
@@ -49,11 +51,16 @@ def make_extract_stage(extractor: Extractor) -> Stage:
     def process(session: Session, statement: Statement) -> None:
         try:
             result = extractor.extract(statement.text)
-        except Exception:
+        except AdapterParseError:
+            # The LM output could not be parsed/validated into the signature's typed
+            # fields — a permanently-malformed extraction. Terminal: do not retry.
             statement.status = "extract_failed"
             statement.claimed_at = None
             session.commit()
             return
+        # Any other exception (transient provider timeout/5xx, etc.) propagates to
+        # run_worker, which rolls back and leaves the row in-flight for reclaim-based
+        # retry — matching Detect's retryable semantics.
         # Verbatim-substring guard at the stage boundary — outside the module, so no
         # extractor implementation can ever land a fabricated quote.
         if not is_verbatim(result.evidence_quote, statement.text):
@@ -79,20 +86,32 @@ def make_extract_stage(extractor: Extractor) -> Stage:
 
 
 def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None,
+               reclaim_interval_seconds: float | None = None,
                once: bool = False, stop_event: "threading.Event | None" = None) -> int:
     settings = get_settings()
     if poll_interval is None:
         poll_interval = settings.worker_poll_interval_seconds
+    if reclaim_interval_seconds is None:
+        reclaim_interval_seconds = settings.worker_stale_reclaim_seconds
 
     # Startup crash-recovery: return rows stuck in this stage's in-flight marker.
     with session_factory() as session:
         reclaim_stale(session, stage.claim_to, stage.claim_from,
                       settings.worker_stale_reclaim_seconds)
+    last_reclaim = time.monotonic()
 
     processed = 0
     while True:
         if stop_event is not None and stop_event.is_set():
             break
+        # Periodic in-loop reclaim: a single always-on daemon must also recover rows
+        # stuck in-flight without waiting for a restart. Safe to run anytime — it only
+        # touches rows older than the cutoff.
+        if time.monotonic() - last_reclaim >= reclaim_interval_seconds:
+            with session_factory() as session:
+                reclaim_stale(session, stage.claim_to, stage.claim_from,
+                              settings.worker_stale_reclaim_seconds)
+            last_reclaim = time.monotonic()
         with session_factory() as session:
             statement = claim_one(session, stage.claim_from, stage.claim_to)
             if statement is not None:
@@ -110,7 +129,6 @@ def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None
                 if stop_event.wait(poll_interval):
                     break
             else:
-                import time
                 time.sleep(poll_interval)
     return processed
 

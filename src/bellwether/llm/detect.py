@@ -1,7 +1,7 @@
 import dspy
 from bellwether.config import get_settings
 from bellwether.llm.config import make_lm
-from bellwether.llm.contracts import DetectionResult
+from bellwether.llm.contracts import DetectionResult, Detector
 
 
 class DetectSig(dspy.Signature):
@@ -34,7 +34,7 @@ class _DetectorAdapter:
         return DetectionResult(is_relevant=bool(pred.is_relevant), score=float(pred.score))
 
 
-def build_detector(lm: dspy.LM | None = None) -> _DetectorAdapter:
+def build_detector(lm: dspy.LM | None = None) -> Detector:
     settings = get_settings()
     module = Detect()
     module.set_lm(lm or make_lm(settings.detect_model))

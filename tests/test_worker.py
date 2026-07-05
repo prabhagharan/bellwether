@@ -1,6 +1,9 @@
 # tests/test_worker.py
+import threading
+from unittest.mock import patch
 from datetime import datetime, timezone
 from sqlalchemy import select, func
+from dspy.utils.exceptions import AdapterParseError
 from bellwether.models.figure import Figure
 from bellwether.models.source import Source
 from bellwether.models.statement import Statement
@@ -75,11 +78,27 @@ def test_extract_stage_fails_on_non_verbatim_quote(db_session):
     assert n == 0  # no row written for a non-verbatim quote
 
 
-def test_extract_stage_fails_on_extractor_error(db_session):
+class _FakeSignature:
+    output_fields = {}
+
+
+def test_extract_stage_fails_terminal_on_parse_error(db_session):
     st = _statement(db_session, "anything", status="extracting")
-    stage = make_extract_stage(StubExtractor(exc=ValueError("boom")))
+    stage = make_extract_stage(StubExtractor(exc=AdapterParseError(
+        adapter_name="ChatAdapter", signature=_FakeSignature(), lm_response="garbled")))
     stage.process(db_session, st)
     assert st.status == "extract_failed"
+    n = db_session.execute(select(func.count()).select_from(Extraction)
+                           .where(Extraction.statement_id == st.id)).scalar_one()
+    assert n == 0  # terminal failure — no row written
+
+
+def test_extract_stage_propagates_transient_error(db_session):
+    st = _statement(db_session, "anything", status="extracting")
+    stage = make_extract_stage(StubExtractor(exc=RuntimeError("timeout")))
+    with pytest.raises(RuntimeError):
+        stage.process(db_session, st)
+    assert st.status == "extracting"  # unchanged — remains retryable via reclaim
 
 
 import pytest
@@ -141,3 +160,22 @@ def test_end_to_end_detect_then_extract(clean_db):
         assert st.status == "extracted"
         assert s.execute(select(func.count()).select_from(Detection)).scalar_one() == 1
         assert s.execute(select(func.count()).select_from(Extraction)).scalar_one() == 1
+
+
+def test_run_worker_reclaims_periodically_not_just_at_startup(clean_db):
+    # Empty queue (clean_db) — the worker will idle every iteration, giving us a
+    # deterministic hook to prove reclaim runs more than once (startup + periodic)
+    # without any wall-clock sleep or flakiness.
+    stop_event = threading.Event()
+    calls = []
+
+    def fake_reclaim(session, in_status, to_status, older_than_seconds):
+        calls.append(1)
+        if len(calls) >= 2:
+            stop_event.set()
+        return 0
+
+    stage = make_detect_stage(StubDetector(DetectionResult(True, 0.9)), threshold=0.5)
+    with patch("bellwether.worker.reclaim_stale", side_effect=fake_reclaim) as mock_reclaim:
+        run_worker(stage, poll_interval=0.01, reclaim_interval_seconds=0, stop_event=stop_event)
+    assert mock_reclaim.call_count >= 2

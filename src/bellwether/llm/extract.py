@@ -2,7 +2,7 @@ from typing import Literal
 import dspy
 from bellwether.config import get_settings
 from bellwether.llm.config import make_lm
-from bellwether.llm.contracts import ExtractionResult
+from bellwether.llm.contracts import ExtractionResult, Extractor
 
 
 class ExtractSig(dspy.Signature):
@@ -44,7 +44,7 @@ class _ExtractorAdapter:
         )
 
 
-def build_extractor(lm: dspy.LM | None = None) -> _ExtractorAdapter:
+def build_extractor(lm: dspy.LM | None = None) -> Extractor:
     settings = get_settings()
     module = Extract()
     module.set_lm(lm or make_lm(settings.extract_model))

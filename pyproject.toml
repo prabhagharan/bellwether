@@ -46,4 +46,11 @@ filterwarnings = [
     # supported dependency here (per the task brief) -- this is a
     # library-level nag, not something our code can address.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:UserWarning:fastapi.testclient",
+    # dspy 3.2.1 bundles avatar-optimizer signatures/module that still pass the
+    # now-defunct `prefix=` kwarg to InputField/OutputField internally; this is
+    # dspy's own dead code path (unrelated to our Predict/ChainOfThought usage in
+    # llm/detect.py and llm/extract.py) and not something our code triggers or can
+    # fix.
+    "ignore:The 'prefix' argument in InputField/OutputField is deprecated and has no effect in DSPy\\. It will be removed in a future version\\.:DeprecationWarning:dspy.predict.avatar.signatures",
+    "ignore:The 'prefix' argument in InputField/OutputField is deprecated and has no effect in DSPy\\. It will be removed in a future version\\.:DeprecationWarning:dspy.teleprompt.avatar_optimizer",
 ]
