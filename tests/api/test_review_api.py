@@ -6,6 +6,7 @@ from bellwether.models.statement import Statement
 from bellwether.models.extraction import Extraction
 from bellwether.models.relevance_label import RelevanceLabel
 from bellwether.models.extraction_label import ExtractionLabel
+from bellwether.models.user import User
 from bellwether.repositories.users import get_user_by_username
 
 
@@ -60,3 +61,17 @@ def test_correct_and_reject_and_verbatim(client, auth_headers, db_session):
     assert rej.status_code == 200
     rel2 = db_session.execute(select(RelevanceLabel).where(RelevanceLabel.statement_id == st2.id)).scalar_one()
     assert rel2.is_relevant is False
+
+
+def test_owner_scoping(client, auth_headers, db_session):
+    """Statement owned by different user is invisible to tester."""
+    other = User(username="other_user", hashed_password="x", is_active=True)
+    db_session.add(other)
+    db_session.flush()
+    st = _seed_extracted(db_session, other.id)
+    # other user's statement should not appear in tester's queue
+    q = client.get("/review/queue?module=extract", headers=auth_headers).json()
+    assert not any(item["statement_id"] == st.id for item in q)
+    # POST to other user's statement should return 404
+    r = client.post(f"/review/{st.id}", json={"is_relevant": True}, headers=auth_headers)
+    assert r.status_code == 404
