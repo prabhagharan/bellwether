@@ -14,12 +14,14 @@ from bellwether.worker import make_detect_stage, make_extract_stage
 
 class StubDetector:
     model = "stub/detect"
+    version = "baseline"
     def __init__(self, result): self._result = result
     def detect(self, statement_text): return self._result
 
 
 class StubExtractor:
     model = "stub/extract"
+    version = "baseline"
     def __init__(self, result=None, exc=None): self._result, self._exc = result, exc
     def extract(self, statement_text):
         if self._exc is not None:

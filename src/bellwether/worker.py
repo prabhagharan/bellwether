@@ -24,6 +24,7 @@ from bellwether.config import get_settings
 from bellwether.queue import claim_one, reclaim_stale, claim_due_impact, reclaim_stale_impacts
 from bellwether.llm.detect import build_detector
 from bellwether.llm.extract import build_extractor
+from bellwether.programs import load_champion
 from bellwether.market.base import MarketData
 from bellwether.measure.impact import compute_impact
 from bellwether.windows import parse_window, parse_windows
@@ -46,7 +47,7 @@ def make_detect_stage(detector: Detector, threshold: float) -> Stage:
         result = detector.detect(statement.text)
         session.add(Detection(
             statement_id=statement.id, is_relevant=result.is_relevant, score=result.score,
-            model=detector.model, version="baseline",
+            model=detector.model, version=detector.version,
         ))
         statement.status = "detected" if (result.is_relevant and result.score >= threshold) else "irrelevant"
         statement.claimed_at = None
@@ -77,7 +78,7 @@ def make_extract_stage(extractor: Extractor) -> Stage:
         session.add(Extraction(
             statement_id=statement.id, entities=result.entities, direction=result.direction,
             magnitude=result.magnitude, confidence=result.confidence,
-            evidence_quote=result.evidence_quote, model=extractor.model, version="baseline",
+            evidence_quote=result.evidence_quote, model=extractor.model, version=extractor.version,
         ))
         statement.status = "extracted"
         statement.claimed_at = None
@@ -234,9 +235,17 @@ def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None
 def _build_stage(name: str) -> Stage:
     settings = get_settings()
     if name == "detect":
-        return make_detect_stage(build_detector(), settings.relevance_threshold)
+        with SessionLocal() as s:
+            champ = load_champion(s, "detect")
+        detector = (build_detector(program_state=champ[0], version=str(champ[1]))
+                    if champ else build_detector())
+        return make_detect_stage(detector, settings.relevance_threshold)
     if name == "extract":
-        return make_extract_stage(build_extractor())
+        with SessionLocal() as s:
+            champ = load_champion(s, "extract")
+        extractor = (build_extractor(program_state=champ[0], version=str(champ[1]))
+                     if champ else build_extractor())
+        return make_extract_stage(extractor)
     if name == "resolve":
         return make_resolve_stage(build_resolver(), parse_windows(settings.measure_windows))
     return make_measure_stage(build_market_data(), settings.measure_baseline_bars)

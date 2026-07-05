@@ -15,10 +15,12 @@ def test_extraction_result_holds_fields():
 def test_stub_satisfies_protocols():
     class StubDetector:
         model = "stub/detect"
+        version = "baseline"
         def detect(self, statement_text): return DetectionResult(True, 1.0)
 
     class StubExtractor:
         model = "stub/extract"
+        version = "baseline"
         def extract(self, statement_text):
             return ExtractionResult([], "neutral", "none", 0.0, "")
 
