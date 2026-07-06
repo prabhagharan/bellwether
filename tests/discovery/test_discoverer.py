@@ -17,3 +17,12 @@ def test_gapfill_with_dummy_lm():
                     [SearchResult("Blog", "https://x.com/feed", "posts")])
     assert len(out) == 1 and isinstance(out[0], SourceCandidate)
     assert out[0].connector_type == "rss" and out[0].config == {"feed_url": "https://x.com/feed"}
+
+
+def test_gapfill_skips_malformed_config():
+    lm = dspy.utils.DummyLM([{"candidates": '[{"connector_type": "rss", "config": {"feed_url": "https://a.com/feed"}, "rationale": "ok"}, {"connector_type": "rss", "config": "notadict", "rationale": "bad"}]'}])
+    d = build_discoverer(lm=lm)
+    out = d.gapfill("Test Figure", ["https://example.com"],
+                    [SearchResult("Source", "https://a.com/feed", "snippet")])
+    assert len(out) == 1 and isinstance(out[0], SourceCandidate)
+    assert out[0].connector_type == "rss" and out[0].config == {"feed_url": "https://a.com/feed"}

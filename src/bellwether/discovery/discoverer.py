@@ -60,7 +60,7 @@ class _DiscovererAdapter:
             return []
         out = []
         for c in raw if isinstance(raw, list) else []:
-            if isinstance(c, dict) and "connector_type" in c and "config" in c:
+            if isinstance(c, dict) and "connector_type" in c and "config" in c and isinstance(c["config"], dict):
                 out.append(SourceCandidate(connector_type=str(c["connector_type"]),
                                            config=dict(c["config"]), rationale=str(c.get("rationale", ""))))
         return out
