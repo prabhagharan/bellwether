@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
 from sqlalchemy import select
 from bellwether.models.figure import Figure
 from bellwether.models.source import Source
 from bellwether.discovery.pipeline import run_discovery
 from bellwether.discovery.contracts import (
-    WikidataEntity, WikidataClaims, XStatus, Disambiguation, SourceCandidate, FetchResult,
+    WikidataEntity, WikidataClaims, Disambiguation, FetchResult,
 )
 
 
@@ -39,7 +38,8 @@ class StubHttp:
 def _figure(db_session):
     f = Figure(name="Jerome Powell", type="individual", aliases=[], owner_id=None,
                discovery_status="running")
-    db_session.add(f); db_session.flush()
+    db_session.add(f)
+    db_session.flush()
     return f
 
 
@@ -49,13 +49,22 @@ def test_run_discovery_creates_verified_and_pending(db_session):
                   x_verifier=StubX(), discoverer=StubDiscoverer(), http=StubHttp())
     db_session.flush()
     assert f.wikidata_id == "Q1" and "Jay" in f.aliases
-    srcs = {s.connector_type: s for s in db_session.execute(
-        select(Source).where(Source.figure_id == f.id)).scalars()}
-    # website feed: wikidata(0.6)+domain_match(0.3, feed on official domain)+reachable(0.2) -> active
-    assert srcs["rss"].status == "active" and srcs["rss"].verified is True and srcs["rss"].enabled is True
+    all_srcs = db_session.execute(select(Source).where(Source.figure_id == f.id)).scalars().all()
+    rss_srcs = [s for s in all_srcs if s.connector_type == "rss"]
+    x_srcs = [s for s in all_srcs if s.connector_type == "x"]
+
+    # website feed + youtube feed are both independent, additive rss sources
+    assert len(rss_srcs) == 2
+    for s in rss_srcs:
+        assert s.status == "active" and s.verified is True and s.enabled is True
+    feed_urls = {s.config["feed_url"] for s in rss_srcs}
+    assert "https://fed.gov/feed" in feed_urls
+    assert any("channel_id=UCabc" in url for url in feed_urls)
+
     # X handle: wikidata only (0.6), no key -> pending_review
-    assert srcs["x"].status == "pending_review" and srcs["x"].enabled is False
-    assert srcs["x"].discovery_meta["wikidata"] is True
+    assert len(x_srcs) == 1
+    assert x_srcs[0].status == "pending_review" and x_srcs[0].enabled is False
+    assert x_srcs[0].discovery_meta["wikidata"] is True
 
 
 def test_run_discovery_is_idempotent(db_session):
@@ -65,4 +74,4 @@ def test_run_discovery_is_idempotent(db_session):
                       x_verifier=StubX(), discoverer=StubDiscoverer(), http=StubHttp())
         db_session.flush()
     n = len(db_session.execute(select(Source).where(Source.figure_id == f.id)).scalars().all())
-    assert n == 2   # one rss + one x, no duplicates on re-run
+    assert n == 3   # two rss (website + youtube) + one x, no duplicates on re-run

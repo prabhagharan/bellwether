@@ -55,18 +55,15 @@ def run_discovery(session: Session, figure: Figure, *, wikidata, web_search, x_v
         if claims.website:
             official_domain = domain_of(claims.website)
 
-        # website -> rss feed
-        website_rss_found = False
+        # website -> rss feed (feed auto-discovery)
         if claims.website:
             feed = _feed_for_website(claims.website, http)
             if feed:
                 signals = {"wikidata": True, "domain_match": domain_of(feed) == official_domain,
                            "reachable": _reachable(feed, http)}
                 bindings.append(_binding("rss", {"feed_url": feed}, signals, threshold, ambiguous))
-                website_rss_found = True
-        # youtube -> rss feed (fallback: only when the official website has no discoverable feed
-        # of its own, so a figure with both doesn't get two redundant "rss" sources)
-        if claims.youtube_channel and not website_rss_found:
+        # youtube -> rss feed (independent, additive)
+        if claims.youtube_channel:
             feed = youtube_feed_url(claims.youtube_channel)
             signals = {"wikidata": True, "reachable": _reachable(feed, http)}
             bindings.append(_binding("rss", {"feed_url": feed}, signals, threshold, ambiguous))
@@ -93,12 +90,12 @@ def run_discovery(session: Session, figure: Figure, *, wikidata, web_search, x_v
 
 
 def _binding(connector_type, config, signals, threshold, ambiguous, source="wikidata") -> SourceBinding:
-    confidence, verified = score_binding(signals, threshold)
-    active = verified and not ambiguous
+    confidence, signal_verified = score_binding(signals, threshold)
+    active = signal_verified and not ambiguous
     meta = {"source": source, **{k: signals.get(k) for k in ("wikidata", "domain_match", "x_verified", "reachable")}}
     return SourceBinding(
         connector_type=connector_type, config=config, origin="discovered",
-        status="active" if active else "pending_review", verified=verified,
+        status="active" if active else "pending_review", verified=active,
         discovery_confidence=confidence, discovery_meta=meta, enabled=active,
     )
 
