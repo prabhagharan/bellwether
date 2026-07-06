@@ -4,8 +4,11 @@ from bellwether.models.figure import Figure
 from bellwether.models.source import Source
 
 
-def create_figure(session: Session, name: str, type: str, aliases: list, owner_id: int | None) -> Figure:
-    figure = Figure(name=name, type=type, aliases=aliases, owner_id=owner_id)
+def create_figure(session: Session, name: str, type: str, aliases: list, owner_id: int | None,
+                  discover: bool = True) -> Figure:
+    discovery_status = "pending" if discover else "skipped"
+    figure = Figure(name=name, type=type, aliases=aliases, owner_id=owner_id,
+                    discovery_status=discovery_status)
     session.add(figure)
     session.flush()
     return figure

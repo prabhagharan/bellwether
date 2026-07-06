@@ -8,6 +8,7 @@ class FigureCreate(BaseModel):
     name: str
     type: str
     aliases: list[str] = []
+    discover: bool = True
 
 
 class FigureRead(BaseModel):
@@ -16,6 +17,8 @@ class FigureRead(BaseModel):
     name: str
     type: str
     aliases: list[str]
+    discovery_status: str
+    wikidata_id: str | None
 
 
 class SourceCreate(BaseModel):
@@ -33,6 +36,9 @@ class SourceRead(BaseModel):
     provenance: str
     origin: str
     enabled: bool
+    status: str
+    verified: bool
+    discovery_confidence: float | None
 
 
 class SourceUpdate(BaseModel):
