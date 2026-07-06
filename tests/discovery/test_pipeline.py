@@ -3,7 +3,7 @@ from bellwether.models.figure import Figure
 from bellwether.models.source import Source
 from bellwether.discovery.pipeline import run_discovery
 from bellwether.discovery.contracts import (
-    WikidataEntity, WikidataClaims, Disambiguation, FetchResult,
+    WikidataEntity, WikidataClaims, Disambiguation, FetchResult, SearchResult, SourceCandidate,
 )
 
 
@@ -75,3 +75,52 @@ def test_run_discovery_is_idempotent(db_session):
         db_session.flush()
     n = len(db_session.execute(select(Source).where(Source.figure_id == f.id)).scalars().all())
     assert n == 3   # two rss (website + youtube) + one x, no duplicates on re-run
+
+
+def test_rerun_preserves_confirmed_source(db_session):
+    """A human 'confirm' (pending_review -> active) must survive re-discovery, not be downgraded."""
+    f = _figure(db_session)
+    run_discovery(db_session, f, wikidata=StubWikidata(), web_search=StubWeb(),
+                  x_verifier=StubX(), discoverer=StubDiscoverer(), http=StubHttp())
+    db_session.flush()
+    # simulate the review endpoint confirming the pending X source
+    x = db_session.execute(
+        select(Source).where(Source.figure_id == f.id, Source.connector_type == "x")).scalar_one()
+    x.status, x.enabled, x.verified = "active", True, True
+    db_session.flush()
+    # re-run discovery — the confirmed source must NOT revert to pending_review/disabled
+    run_discovery(db_session, f, wikidata=StubWikidata(), web_search=StubWeb(),
+                  x_verifier=StubX(), discoverer=StubDiscoverer(), http=StubHttp())
+    db_session.flush()
+    db_session.refresh(x)
+    assert x.status == "active" and x.enabled is True and x.verified is True
+
+
+class NoMatchWikidata:
+    def search(self, name): return []
+    def claims(self, qid): raise AssertionError("claims should not be called with no candidates")
+
+
+class GapWeb:
+    def search(self, query): return [SearchResult("Blog", "https://blog.example.com/feed", "posts")]
+
+
+class GapDiscoverer:
+    def disambiguate(self, name, candidates): raise AssertionError("disambiguate needs candidates")
+    def gapfill(self, figure_name, known, results):
+        return [SourceCandidate(connector_type="rss",
+                                config={"feed_url": "https://blog.example.com/feed"},
+                                rationale="found via search")]
+
+
+def test_gapfill_runs_without_wikidata_match(db_session):
+    """No Wikidata match -> gap-fill still runs (spec §8); its proposals are pending_review only."""
+    f = _figure(db_session)
+    run_discovery(db_session, f, wikidata=NoMatchWikidata(), web_search=GapWeb(),
+                  x_verifier=StubX(), discoverer=GapDiscoverer(), http=StubHttp())
+    db_session.flush()
+    srcs = db_session.execute(select(Source).where(Source.figure_id == f.id)).scalars().all()
+    assert len(srcs) == 1
+    assert srcs[0].connector_type == "rss"
+    assert srcs[0].status == "pending_review" and srcs[0].enabled is False   # LLM proposal cannot auto-enable
+    assert srcs[0].discovery_meta["source"] == "tavily"

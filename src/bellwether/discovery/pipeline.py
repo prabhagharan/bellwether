@@ -42,6 +42,8 @@ def run_discovery(session: Session, figure: Figure, *, wikidata, web_search, x_v
 
     candidates = wikidata.search(figure.name)
     official_domain = None
+    ambiguous = False
+    known: list[str] = []
     bindings: list[SourceBinding] = []
 
     if candidates:
@@ -54,6 +56,7 @@ def run_discovery(session: Session, figure: Figure, *, wikidata, web_search, x_v
             figure.aliases = sorted(set(list(figure.aliases) + claims.aliases))
         if claims.website:
             official_domain = domain_of(claims.website)
+            known = [claims.website]
 
         # website -> rss feed (feed auto-discovery)
         if claims.website:
@@ -76,15 +79,16 @@ def run_discovery(session: Session, figure: Figure, *, wikidata, web_search, x_v
                        "x_verified": bool(xs and xs.verified)}
             bindings.append(_binding(ct, cfg, signals, threshold, ambiguous))
 
-        # gap-fill (LLM + web search) — proposals, must pass verification
-        results = web_search.search(f"{figure.name} official blog rss feed")
-        known = [claims.website] if claims.website else []
-        for cand in discoverer.gapfill(figure.name, known, results):
-            reachable = _reachable(cand.config.get("feed_url", ""), http) if cand.connector_type == "rss" else False
-            signals = {"domain_match": official_domain is not None and
-                       domain_of(cand.config.get("feed_url", "")) == official_domain,
-                       "reachable": reachable}
-            bindings.append(_binding(cand.connector_type, cand.config, signals, threshold, ambiguous, source="tavily"))
+    # gap-fill (LLM + web search) — proposals, must pass verification.
+    # Runs even with NO Wikidata match (spec §8): such candidates can only ever be
+    # pending_review (no wikidata signal), but the path must not be silently dead.
+    results = web_search.search(f"{figure.name} official blog rss feed")
+    for cand in discoverer.gapfill(figure.name, known, results):
+        reachable = _reachable(cand.config.get("feed_url", ""), http) if cand.connector_type == "rss" else False
+        signals = {"domain_match": official_domain is not None and
+                   domain_of(cand.config.get("feed_url", "")) == official_domain,
+                   "reachable": reachable}
+        bindings.append(_binding(cand.connector_type, cand.config, signals, threshold, ambiguous, source="tavily"))
 
     _upsert(session, figure, bindings)
 
@@ -114,8 +118,9 @@ def _upsert(session: Session, figure: Figure, bindings: list[SourceBinding]) -> 
                 discovery_confidence=b.discovery_confidence, discovery_meta=b.discovery_meta,
                 owner_id=figure.owner_id,
             ))
-        else:  # re-run: refresh scores, but never override a human review decision
-            if row.status != "rejected":
+        else:  # re-run: only refresh rows still awaiting review. A human decision —
+               # confirm (-> status="active") or reject (-> "rejected") — is never overwritten.
+            if row.status == "pending_review":
                 row.status, row.verified = b.status, b.verified
                 row.discovery_confidence, row.discovery_meta = b.discovery_confidence, b.discovery_meta
                 row.enabled = b.enabled

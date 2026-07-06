@@ -90,6 +90,7 @@ def claim_pending_figure(session: Session, to_status: str = "running") -> Figure
         return None
     figure.discovery_status = to_status
     figure.discovery_claimed_at = datetime.now(timezone.utc)
+    session.commit()
     return figure
 
 
