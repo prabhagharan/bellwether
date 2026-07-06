@@ -74,3 +74,17 @@ class ReviewQueueItem(BaseModel):
     text: str
     figure_name: str
     current_extraction: dict | None
+
+
+class DiscoveryQueueItem(BaseModel):
+    source_id: int
+    figure_id: int
+    figure_name: str
+    connector_type: str
+    config: dict
+    discovery_confidence: float | None
+    discovery_meta: dict | None
+
+
+class DiscoveryDecision(BaseModel):
+    decision: str
