@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from bellwether.models.statement import Statement
 from bellwether.models.impact import Impact
 from bellwether.models.figure import Figure
+from bellwether.models.extraction import Extraction
 
 
 def claim_one(session: Session, from_status: str, to_status: str) -> Statement | None:
@@ -100,6 +101,30 @@ def reclaim_stale_figures(session: Session, in_status: str, to_status: str,
     result = session.execute(
         update(Figure).where(Figure.discovery_status == in_status, Figure.discovery_claimed_at < cutoff)
         .values(discovery_status=to_status, discovery_claimed_at=None)
+    )
+    session.commit()
+    return result.rowcount
+
+
+def claim_pending_extraction(session: Session, to_status: str = "alerting") -> Extraction | None:
+    extraction = session.execute(
+        select(Extraction).where(Extraction.alert_status == "pending")
+        .order_by(Extraction.id).with_for_update(skip_locked=True).limit(1)
+    ).scalar_one_or_none()
+    if extraction is None:
+        return None
+    extraction.alert_status = to_status
+    extraction.alert_claimed_at = datetime.now(timezone.utc)
+    session.commit()
+    return extraction
+
+
+def reclaim_stale_alerting(session: Session, in_status: str, to_status: str,
+                           older_than_seconds: float) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+    result = session.execute(
+        update(Extraction).where(Extraction.alert_status == in_status, Extraction.alert_claimed_at < cutoff)
+        .values(alert_status=to_status, alert_claimed_at=None)
     )
     session.commit()
     return result.rowcount
