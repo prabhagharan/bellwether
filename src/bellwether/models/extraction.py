@@ -19,6 +19,8 @@ class Extraction(Base):
     evidence_quote: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str] = mapped_column(String(200), nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False, default="baseline")
+    alert_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    alert_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
