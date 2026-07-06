@@ -12,12 +12,25 @@ router = APIRouter()
 @router.post("/figures", response_model=FigureRead, status_code=status.HTTP_201_CREATED)
 def create_figure(body: FigureCreate, session: Session = Depends(get_session),
                   user: User = Depends(get_current_user)):
-    return repo.create_figure(session, body.name, body.type, body.aliases, owner_id=user.id)
+    return repo.create_figure(session, body.name, body.type, body.aliases, owner_id=user.id,
+                              discover=body.discover)
 
 
 @router.get("/figures", response_model=list[FigureRead])
 def list_figures(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     return repo.list_figures(session, owner_id=user.id)
+
+
+@router.post("/figures/{figure_id}/discover", response_model=FigureRead)
+def trigger_discovery(figure_id: int, session: Session = Depends(get_session),
+                      user: User = Depends(get_current_user)):
+    figure = repo.get_figure(session, figure_id, owner_id=user.id)
+    if figure is None:
+        raise HTTPException(status_code=404, detail="Figure not found")
+    figure.discovery_status = "pending"
+    figure.discovery_claimed_at = None
+    session.flush()
+    return figure
 
 
 @router.delete("/figures/{figure_id}", status_code=status.HTTP_204_NO_CONTENT)

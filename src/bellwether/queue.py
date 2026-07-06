@@ -4,6 +4,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from bellwether.models.statement import Statement
 from bellwether.models.impact import Impact
+from bellwether.models.figure import Figure
 
 
 def claim_one(session: Session, from_status: str, to_status: str) -> Statement | None:
@@ -75,6 +76,30 @@ def reclaim_stale_impacts(session: Session, in_status: str, to_status: str,
         update(Impact)
         .where(Impact.status == in_status, Impact.claimed_at < cutoff)
         .values(status=to_status, claimed_at=None)
+    )
+    session.commit()
+    return result.rowcount
+
+
+def claim_pending_figure(session: Session, to_status: str = "running") -> Figure | None:
+    figure = session.execute(
+        select(Figure).where(Figure.discovery_status == "pending")
+        .order_by(Figure.id).with_for_update(skip_locked=True).limit(1)
+    ).scalar_one_or_none()
+    if figure is None:
+        return None
+    figure.discovery_status = to_status
+    figure.discovery_claimed_at = datetime.now(timezone.utc)
+    session.commit()
+    return figure
+
+
+def reclaim_stale_figures(session: Session, in_status: str, to_status: str,
+                          older_than_seconds: float) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+    result = session.execute(
+        update(Figure).where(Figure.discovery_status == in_status, Figure.discovery_claimed_at < cutoff)
+        .values(discovery_status=to_status, discovery_claimed_at=None)
     )
     session.commit()
     return result.rowcount
