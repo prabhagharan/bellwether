@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     reflection_model: str = "anthropic/claude-sonnet-5"
     gepa_auto: str = "light"
     holdout_modulus: int = 5
+    discovery_model: str = "anthropic/claude-sonnet-5"
+    discovery_confidence_threshold: float = 0.7
 
 
 @lru_cache
