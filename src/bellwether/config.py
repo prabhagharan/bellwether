@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     holdout_modulus: int = 5
     discovery_model: str = "anthropic/claude-sonnet-5"
     discovery_confidence_threshold: float = 0.7
+    cors_origins: list[str] = []
+    sse_poll_interval_seconds: float = 2.0
+    alert_webhook_timeout_seconds: float = 10.0
 
 
 @lru_cache
