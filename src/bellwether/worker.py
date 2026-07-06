@@ -21,7 +21,10 @@ import threading
 import time
 from bellwether.db import SessionLocal
 from bellwether.config import get_settings
-from bellwether.queue import claim_one, reclaim_stale, claim_due_impact, reclaim_stale_impacts
+from bellwether.queue import (
+    claim_one, reclaim_stale, claim_due_impact, reclaim_stale_impacts,
+    claim_pending_figure, reclaim_stale_figures,
+)
 from bellwether.llm.detect import build_detector
 from bellwether.llm.extract import build_extractor
 from bellwether.programs import load_champion
@@ -30,6 +33,8 @@ from bellwether.measure.impact import compute_impact
 from bellwether.windows import parse_window, parse_windows
 from bellwether.llm.resolve import build_resolver
 from bellwether.market.registry import build_market_data
+from bellwether.discovery.pipeline import run_discovery
+from bellwether.discovery.contracts import DiscoveryError
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +195,27 @@ def make_measure_stage(market: MarketData, baseline_bars: int) -> Stage:
     )
 
 
+def make_discovery_stage(*, wikidata, web_search, x_verifier, discoverer, http) -> Stage:
+    def process(session, figure) -> None:
+        try:
+            run_discovery(session, figure, wikidata=wikidata, web_search=web_search,
+                          x_verifier=x_verifier, discoverer=discoverer, http=http)
+            figure.discovery_status = "done"
+            figure.discovery_error = None
+        except DiscoveryError as exc:
+            figure.discovery_status = "failed"
+            figure.discovery_error = str(exc)
+        figure.discovery_claimed_at = None
+        session.commit()
+
+    return Stage(
+        name="discovery",
+        claim_next=lambda s: claim_pending_figure(s, "running"),
+        reclaim=lambda s, secs: reclaim_stale_figures(s, "running", "pending", secs),
+        process=process,
+    )
+
+
 def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None,
                reclaim_interval_seconds: float | None = None,
                once: bool = False, stop_event: "threading.Event | None" = None) -> int:
@@ -248,12 +274,21 @@ def _build_stage(name: str) -> Stage:
         return make_extract_stage(extractor)
     if name == "resolve":
         return make_resolve_stage(build_resolver(), parse_windows(settings.measure_windows))
+    if name == "discovery":
+        from bellwether.discovery.wikidata import build_wikidata
+        from bellwether.discovery.websearch import build_web_search
+        from bellwether.discovery.xverify import build_x_verifier
+        from bellwether.discovery.discoverer import build_discoverer
+        from bellwether.discovery.http import build_http
+        return make_discovery_stage(wikidata=build_wikidata(), web_search=build_web_search(),
+                                    x_verifier=build_x_verifier(), discoverer=build_discoverer(),
+                                    http=build_http())
     return make_measure_stage(build_market_data(), settings.measure_baseline_bars)
 
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="bellwether.worker")
-    parser.add_argument("stage", choices=["detect", "extract", "resolve", "measure"])
+    parser.add_argument("stage", choices=["detect", "extract", "resolve", "measure", "discovery"])
     parser.add_argument("--once", action="store_true",
                         help="drain the queue once and exit (default: run as a daemon)")
     args = parser.parse_args(argv)
