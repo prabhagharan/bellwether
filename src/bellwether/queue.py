@@ -100,4 +100,5 @@ def reclaim_stale_figures(session: Session, in_status: str, to_status: str,
         update(Figure).where(Figure.discovery_status == in_status, Figure.discovery_claimed_at < cutoff)
         .values(discovery_status=to_status, discovery_claimed_at=None)
     )
+    session.commit()
     return result.rowcount
