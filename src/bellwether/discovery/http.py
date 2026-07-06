@@ -1,5 +1,6 @@
 # src/bellwether/discovery/http.py
 import urllib.request
+from bellwether.ssl_ctx import SSL_CONTEXT
 from bellwether.discovery.contracts import FetchResult, HttpClient
 
 
@@ -10,7 +11,7 @@ class UrllibHttpClient:
     def get(self, url: str) -> FetchResult:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "bellwether/1.0"})
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout, context=SSL_CONTEXT) as resp:
                 if resp.status != 200:
                     return FetchResult(ok=False, text=None)
                 raw = resp.read()

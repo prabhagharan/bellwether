@@ -1,6 +1,7 @@
 import json
 import os
 import urllib.request
+from bellwether.ssl_ctx import SSL_CONTEXT
 from bellwether.discovery.contracts import XStatus, XVerifier, DiscoveryError
 
 
@@ -20,7 +21,7 @@ class XVerifierAdapter:
         url = f"https://api.twitter.com/2/users/by/username/{handle.lstrip('@')}?user.fields=verified"
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {self._api_key}"})
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self._timeout, context=SSL_CONTEXT) as resp:
                 payload = json.loads(resp.read().decode("utf-8", errors="replace"))
         except Exception as exc:
             raise DiscoveryError("x verify request failed") from exc

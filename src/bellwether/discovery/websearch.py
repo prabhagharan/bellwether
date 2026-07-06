@@ -1,6 +1,7 @@
 import json
 import os
 import urllib.request
+from bellwether.ssl_ctx import SSL_CONTEXT
 from bellwether.discovery.contracts import SearchResult, WebSearch, DiscoveryError
 
 _ENDPOINT = "https://api.tavily.com/search"
@@ -25,7 +26,7 @@ class TavilyAdapter:
         req = urllib.request.Request(_ENDPOINT, data=body,
                                      headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self._timeout, context=SSL_CONTEXT) as resp:
                 payload = json.loads(resp.read().decode("utf-8", errors="replace"))
         except Exception as exc:
             raise DiscoveryError("tavily request failed") from exc

@@ -1,6 +1,7 @@
 import json
 import urllib.request
 from datetime import datetime, timezone
+from bellwether.ssl_ctx import SSL_CONTEXT
 from bellwether.connectors.base import RawItem
 
 
@@ -29,7 +30,7 @@ class XConnector:
                f"?query=from:{self.handle}&tweet.fields=created_at&max_results=20")
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {self.api_key}"})
         try:
-            with urllib.request.urlopen(req, timeout=10.0) as resp:
+            with urllib.request.urlopen(req, timeout=10.0, context=SSL_CONTEXT) as resp:
                 payload = json.loads(resp.read().decode("utf-8", errors="replace"))
         except Exception:
             return []
