@@ -10,6 +10,27 @@ from bellwether.models.user import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
+def resolve_token(token: str, session: Session) -> User | None:
+    """Decode a raw JWT and look up the User it names.
+
+    Shared by `get_current_user` (bearer header) and the SSE `/stream`
+    endpoint (`?token=` query param) so both paths validate identically.
+    Returns None (never raises) on any invalid/expired token or unknown/
+    inactive user, so callers can turn that into whatever error they need.
+    """
+    try:
+        payload = decode_token(token)
+        username = payload.get("sub")
+    except jwt.InvalidTokenError:
+        return None
+    if not username:
+        return None
+    user = get_user_by_username(session, username)
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     session: Session = Depends(get_session),
@@ -19,14 +40,7 @@ def get_current_user(
         detail="Invalid authentication",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    try:
-        payload = decode_token(token)
-        username = payload.get("sub")
-    except jwt.InvalidTokenError:
-        raise cred_exc
-    if not username:
-        raise cred_exc
-    user = get_user_by_username(session, username)
-    if user is None or not user.is_active:
+    user = resolve_token(token, session)
+    if user is None:
         raise cred_exc
     return user
