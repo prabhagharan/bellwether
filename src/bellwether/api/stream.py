@@ -1,10 +1,10 @@
 import asyncio
 import json
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from bellwether.db import get_session, SessionLocal
+from bellwether.db import SessionLocal
 from bellwether.config import get_settings
 from bellwether.models.alert import Alert
 from bellwether.models.user import User
@@ -29,9 +29,12 @@ def _user_from_token(token: str, session: Session) -> User:
 
 
 @router.get("/stream")
-def stream(token: str = Query(...), session: Session = Depends(get_session)):
-    user = _user_from_token(token, session)
-    owner_id = user.id
+def stream(token: str = Query(...)):
+    # Validate the token in a short-lived session — the request-scoped session would stay
+    # open (idle-in-transaction) for the entire life of the infinite stream, pinning a
+    # pooled connection per client. The generator polls with its own SessionLocal per tick.
+    with SessionLocal() as s:
+        owner_id = _user_from_token(token, s).id
     poll = get_settings().sse_poll_interval_seconds
 
     async def gen():
