@@ -1,4 +1,3 @@
-# src/bellwether/models/alert_rule.py
 from datetime import datetime
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB

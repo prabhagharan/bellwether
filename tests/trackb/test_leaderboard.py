@@ -25,9 +25,8 @@ def _chain(db_session, owner_id, direction, pct_move):
 
 
 def test_leaderboard_hit_rate(db_session):
-    f = _chain(db_session, None, "up", 0.5)      # predicted up, moved up -> hit
-    _chain_same = Statement  # noqa
-    # second impact for the same figure: predicted up, moved down -> miss
+    _chain(db_session, None, "up", 0.5)      # predicted up, moved up -> hit
+    # second figure: predicted up, moved down -> miss
     _chain(db_session, None, "up", -0.3)
     rows = {r["figure_id"]: r for r in leaderboard_by_figure(db_session, owner_id=None)}
     # two different figures created (helper makes a new figure each call) — assert both present with hit-rates

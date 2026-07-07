@@ -1,8 +1,23 @@
-from bellwether.repositories.users import get_user_by_username
+from bellwether.models.user import User
+from bellwether.models.alert_rule import AlertRule
 
 
 def test_requires_auth(client):
     assert client.get("/alert_rules").status_code == 401
+
+
+def test_other_owners_rule_is_invisible_and_404(client, auth_headers, db_session):
+    """A rule owned by a different user is never listed and 404s on PATCH/DELETE (no leak)."""
+    other = User(username="other_rules_user", hashed_password="x", is_active=True)
+    db_session.add(other)
+    db_session.flush()
+    rule = AlertRule(owner_id=other.id, name="theirs", condition={}, webhook_url=None, enabled=True)
+    db_session.add(rule)
+    db_session.flush()
+    listed = client.get("/alert_rules", headers=auth_headers).json()
+    assert all(x["id"] != rule.id for x in listed)
+    assert client.patch(f"/alert_rules/{rule.id}", json={"enabled": False}, headers=auth_headers).status_code == 404
+    assert client.delete(f"/alert_rules/{rule.id}", headers=auth_headers).status_code == 404
 
 
 def test_crud_owner_scoped(client, auth_headers, db_session):
