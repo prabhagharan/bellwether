@@ -1,0 +1,36 @@
+{
+  "name": "bellwether-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "gen:api": "cd .. && LITELLM_LOCAL_MODEL_COST_MAP=True .venv/bin/python -c \"import json; from bellwether.api.app import create_app; open('frontend/openapi.json','w').write(json.dumps(create_app().openapi()))\" && cd frontend && openapi-typescript openapi.json -o src/api/schema.ts"
+  },
+  "dependencies": {
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "openapi-fetch": "0.13.4",
+    "swr": "2.3.0"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "@types/node": "22.10.7",
+    "tailwindcss": "3.4.17",
+    "postcss": "8.5.1",
+    "autoprefixer": "10.4.20",
+    "openapi-typescript": "7.5.2",
+    "vitest": "2.1.8",
+    "@vitejs/plugin-react": "4.3.4",
+    "@testing-library/react": "16.1.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/user-event": "14.5.2",
+    "jsdom": "25.0.1"
+  }
+}
