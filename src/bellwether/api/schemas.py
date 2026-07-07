@@ -119,3 +119,33 @@ class AlertRuleRead(BaseModel):
     condition: dict
     webhook_url: str | None
     enabled: bool
+
+
+class LeaderboardRow(BaseModel):
+    figure_id: int
+    figure_name: str
+    n: int
+    avg_pct_move: float
+    avg_abs_pct_move: float
+    directional_hit_rate: float
+
+
+class SignalRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    statement_id: int
+    direction: str
+    magnitude: str
+    confidence: float
+    entities: list
+    version: str
+
+
+class ImpactRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    symbol: str
+    window: str
+    status: str
+    pct_move: float | None
+    volume_spike: float | None

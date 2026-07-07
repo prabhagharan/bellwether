@@ -8,6 +8,7 @@ from bellwether.api.review import router as review_router
 from bellwether.api.discovery import router as discovery_router
 from bellwether.api.alert_rules import router as alert_rules_router
 from bellwether.api.stream import router as stream_router
+from bellwether.api.feed import router as feed_router
 from bellwether.config import get_settings
 from bellwether.db import SessionLocal
 from bellwether.seed import seed_admin
@@ -33,4 +34,5 @@ def create_app() -> FastAPI:
     app.include_router(discovery_router)
     app.include_router(alert_rules_router)
     app.include_router(stream_router)
+    app.include_router(feed_router)
     return app
