@@ -88,3 +88,34 @@ class DiscoveryQueueItem(BaseModel):
 
 class DiscoveryDecision(BaseModel):
     decision: str
+
+
+class AlertCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    min_confidence: float | None = None
+    min_magnitude: str | None = None
+    directions: list[str] | None = None
+    figure_ids: list[int] | None = None
+
+
+class AlertRuleCreate(BaseModel):
+    name: str
+    condition: AlertCondition = AlertCondition()
+    webhook_url: str | None = None
+    enabled: bool = True
+
+
+class AlertRuleUpdate(BaseModel):
+    name: str | None = None
+    condition: AlertCondition | None = None
+    webhook_url: str | None = None
+    enabled: bool | None = None
+
+
+class AlertRuleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    condition: dict
+    webhook_url: str | None
+    enabled: bool
