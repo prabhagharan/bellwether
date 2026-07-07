@@ -16,7 +16,7 @@ export default function ImpactPage() {
               <tr key={r.figure_id} className="border-t">
                 <td>{r.figure_name}</td><td>{r.n}</td>
                 <td>{r.avg_pct_move?.toFixed?.(2)}</td><td>{r.avg_abs_pct_move?.toFixed?.(2)}</td>
-                <td>{(r.directional_hit_rate * 100).toFixed(0)}%</td>
+                <td>{r.directional_hit_rate != null ? `${(r.directional_hit_rate * 100).toFixed(0)}%` : "—"}</td>
               </tr>
             ))}
           </tbody>
