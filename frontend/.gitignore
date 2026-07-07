@@ -3,3 +3,4 @@ node_modules
 openapi.json
 *.tsbuildinfo
 next-env.d.ts
+.env*.local

@@ -5,23 +5,42 @@ import { client } from "@/api/client";
 import { ConditionBuilder, type Condition } from "@/components/ConditionBuilder";
 import { Badge } from "@/components/Badge";
 
+function errText(e: unknown): string {
+  return typeof e === "object" ? JSON.stringify(e) : String(e);
+}
+
 export default function AlertsPage() {
-  const { data: rules, mutate } = useSWR("/alert_rules", async () => (await client.GET("/alert_rules")).data ?? []);
+  const { data: rules, mutate, error: loadError } = useSWR("/alert_rules", async () => (await client.GET("/alert_rules")).data ?? []);
   const [name, setName] = useState("");
   const [webhook, setWebhook] = useState("");
   const [condition, setCondition] = useState<Condition>({});
+  const [err, setErr] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    await client.POST("/alert_rules", { body: { name, condition, webhook_url: webhook || null, enabled: true } as any });
+    setErr(null);
+    const res = await client.POST("/alert_rules", { body: { name, condition, webhook_url: webhook || null, enabled: true } as any });
+    if (res.error) { setErr(errText(res.error)); return; }
     setName(""); setWebhook(""); mutate();
   }
-  async function toggle(id: number, enabled: boolean) { await client.PATCH("/alert_rules/{rule_id}", { params: { path: { rule_id: id } }, body: { enabled } as any }); mutate(); }
-  async function remove(id: number) { await client.DELETE("/alert_rules/{rule_id}", { params: { path: { rule_id: id } } }); mutate(); }
+  async function toggle(id: number, enabled: boolean) {
+    setErr(null);
+    const res = await client.PATCH("/alert_rules/{rule_id}", { params: { path: { rule_id: id } }, body: { enabled } as any });
+    if (res.error) { setErr(errText(res.error)); return; }
+    mutate();
+  }
+  async function remove(id: number) {
+    setErr(null);
+    const res = await client.DELETE("/alert_rules/{rule_id}", { params: { path: { rule_id: id } } });
+    if (res.error) { setErr(errText(res.error)); return; }
+    mutate();
+  }
 
   return (
     <div>
+      {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+      {loadError && <p className="mb-3 text-sm text-red-600">Failed to load rules.</p>}
       <form onSubmit={create} className="mb-6 space-y-2 rounded border bg-white p-4">
         <div className="flex gap-2">
           <input className="rounded border p-2" placeholder="rule name" value={name} onChange={(e) => setName(e.target.value)} />

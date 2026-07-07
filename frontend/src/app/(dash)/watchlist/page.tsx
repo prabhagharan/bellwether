@@ -23,18 +23,35 @@ function SourceList({ figureId }: { figureId: number }) {
   );
 }
 
+function errText(e: unknown): string {
+  return typeof e === "object" ? JSON.stringify(e) : String(e);
+}
+
 export default function WatchlistPage() {
-  const { data: figures, mutate } = useSWR("/figures", async () => (await client.GET("/figures")).data ?? []);
+  const { data: figures, mutate, error: loadError } = useSWR("/figures", async () => (await client.GET("/figures")).data ?? []);
   const [name, setName] = useState("");
+  const [err, setErr] = useState<string | null>(null);
 
   async function addFigure(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    await client.POST("/figures", { body: { name, type: "individual", discover: true } as any });
+    setErr(null);
+    const res = await client.POST("/figures", { body: { name, type: "individual", discover: true } as any });
+    if (res.error) { setErr(errText(res.error)); return; }
     setName(""); mutate();
   }
-  async function rediscover(id: number) { await client.POST("/figures/{figure_id}/discover", { params: { path: { figure_id: id } } }); mutate(); }
-  async function remove(id: number) { await client.DELETE("/figures/{figure_id}", { params: { path: { figure_id: id } } }); mutate(); }
+  async function rediscover(id: number) {
+    setErr(null);
+    const res = await client.POST("/figures/{figure_id}/discover", { params: { path: { figure_id: id } } });
+    if (res.error) { setErr(errText(res.error)); return; }
+    mutate();
+  }
+  async function remove(id: number) {
+    setErr(null);
+    const res = await client.DELETE("/figures/{figure_id}", { params: { path: { figure_id: id } } });
+    if (res.error) { setErr(errText(res.error)); return; }
+    mutate();
+  }
 
   return (
     <div>
@@ -42,6 +59,8 @@ export default function WatchlistPage() {
         <input className="rounded border p-2" placeholder="Add a figure by name…" value={name} onChange={(e) => setName(e.target.value)} />
         <button className="rounded bg-black px-4 text-white">Add</button>
       </form>
+      {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+      {loadError && <p className="mb-3 text-sm text-red-600">Failed to load figures.</p>}
       <ul className="space-y-3">
         {(figures ?? []).map((f: any) => (
           <li key={f.id} className="rounded border bg-white p-3">
