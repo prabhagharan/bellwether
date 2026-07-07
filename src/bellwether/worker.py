@@ -24,7 +24,9 @@ from bellwether.config import get_settings
 from bellwether.queue import (
     claim_one, reclaim_stale, claim_due_impact, reclaim_stale_impacts,
     claim_pending_figure, reclaim_stale_figures,
+    claim_pending_extraction, reclaim_stale_alerting,
 )
+from bellwether.alerts.engine import evaluate_extraction
 from bellwether.llm.detect import build_detector
 from bellwether.llm.extract import build_extractor
 from bellwether.programs import load_champion
@@ -216,6 +218,21 @@ def make_discovery_stage(*, wikidata, web_search, x_verifier, discoverer, http) 
     )
 
 
+def make_alert_stage(notifier) -> Stage:
+    def process(session, extraction) -> None:
+        evaluate_extraction(session, extraction, notifier)
+        extraction.alert_status = "done"
+        extraction.alert_claimed_at = None
+        session.commit()
+
+    return Stage(
+        name="alert",
+        claim_next=lambda s: claim_pending_extraction(s, "alerting"),
+        reclaim=lambda s, secs: reclaim_stale_alerting(s, "alerting", "pending", secs),
+        process=process,
+    )
+
+
 def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None,
                reclaim_interval_seconds: float | None = None,
                once: bool = False, stop_event: "threading.Event | None" = None) -> int:
@@ -283,12 +300,15 @@ def _build_stage(name: str) -> Stage:
         return make_discovery_stage(wikidata=build_wikidata(), web_search=build_web_search(),
                                     x_verifier=build_x_verifier(), discoverer=build_discoverer(),
                                     http=build_http())
+    if name == "alert":
+        from bellwether.alerts.notifier import build_notifier
+        return make_alert_stage(build_notifier())
     return make_measure_stage(build_market_data(), settings.measure_baseline_bars)
 
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="bellwether.worker")
-    parser.add_argument("stage", choices=["detect", "extract", "resolve", "measure", "discovery"])
+    parser.add_argument("stage", choices=["detect", "extract", "resolve", "measure", "discovery", "alert"])
     parser.add_argument("--once", action="store_true",
                         help="drain the queue once and exit (default: run as a daemon)")
     args = parser.parse_args(argv)
