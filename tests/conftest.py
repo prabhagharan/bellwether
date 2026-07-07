@@ -1,3 +1,9 @@
+import os
+# Use litellm's bundled model-cost map instead of fetching it over the network on import.
+# Without this, importing dspy (→ litellm) does a network fetch that can stall for minutes
+# under load, hanging pytest collection. Set before any test module imports the LLM layer.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
 import pytest
 from sqlalchemy import delete
 from bellwether.db import engine

@@ -12,7 +12,10 @@ from bellwether.models.relevance_label import RelevanceLabel
 from bellwether.models.extraction_label import ExtractionLabel
 from bellwether.models.dspy_program import DspyProgram
 from bellwether.models.eval_run import EvalRun
+from bellwether.models.alert_rule import AlertRule
+from bellwether.models.alert import Alert
 
 __all__ = ["Base", "User", "Figure", "Source", "Statement", "Detection", "Extraction",
            "Resolution", "EntitySymbol", "Impact",
-           "RelevanceLabel", "ExtractionLabel", "DspyProgram", "EvalRun"]
+           "RelevanceLabel", "ExtractionLabel", "DspyProgram", "EvalRun",
+           "AlertRule", "Alert"]
