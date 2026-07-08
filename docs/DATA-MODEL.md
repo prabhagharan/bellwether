@@ -8,10 +8,10 @@ verified against the model code, not assumed.
 
 ```mermaid
 erDiagram
-    USERS ||--o{ FIGURES : "owns (nullable)"
-    USERS ||--o{ SOURCES : "owns (nullable)"
-    USERS ||--o{ ALERT_RULES : "owns (nullable)"
-    USERS ||--o{ ALERTS : "owns (nullable)"
+    USERS |o--o{ FIGURES : "owns (nullable)"
+    USERS |o--o{ SOURCES : "owns (nullable)"
+    USERS |o--o{ ALERT_RULES : "owns (nullable)"
+    USERS |o--o{ ALERTS : "owns (nullable)"
 
     FIGURES ||--o{ SOURCES : has
     FIGURES ||--o{ STATEMENTS : has

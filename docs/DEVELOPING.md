@@ -108,5 +108,5 @@ touching the stages that consume them.
 ## 5. Docker
 
 For the full containerized stack (Postgres + migrations + API + all six workers + the frontend in one
-command), see **[../README-docker.md](../README-docker.md)**. `docker compose up db` (used above) starts
+command), see **[../README-docker.md](../README-docker.md)**. `docker compose up -d db` (used above) starts
 just Postgres for host development; `docker compose up --build` runs everything.
