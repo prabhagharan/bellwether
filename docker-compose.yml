@@ -7,3 +7,98 @@ services:
       POSTGRES_DB: bellwether
     ports:
       - "5432:5432"
+    volumes:
+      - bw_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bellwether -d bellwether"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrator:
+    build: .
+    command: alembic upgrade head
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    command: uvicorn bellwether.api.app:create_app --factory --host 0.0.0.0 --port 8000
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  detect:
+    build: .
+    command: python -m bellwether.worker detect
+    env_file: .env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  extract:
+    build: .
+    command: python -m bellwether.worker extract
+    env_file: .env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  resolve:
+    build: .
+    command: python -m bellwether.worker resolve
+    env_file: .env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  measure:
+    build: .
+    command: python -m bellwether.worker measure
+    env_file: .env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  discovery:
+    build: .
+    command: python -m bellwether.worker discovery
+    env_file: .env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  alert:
+    build: .
+    command: python -m bellwether.worker alert
+    env_file: .env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  bw_pgdata: {}
