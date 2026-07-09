@@ -37,4 +37,4 @@ spec → plan → subagent-driven TDD → per-task review → whole-branch revie
 .venv/bin/python -m pytest -q
 ```
 
-The worker (`bellwether.worker`) and optimizer (`bellwether.eval.optimize`) are invoked as CLIs. For run/extend mechanics, see [docs/DEVELOPING.md](docs/DEVELOPING.md).
+The worker (`bellwether.worker`) and optimizer (`bellwether.optimize`) are invoked as CLIs. For run/extend mechanics, see [docs/DEVELOPING.md](docs/DEVELOPING.md).
