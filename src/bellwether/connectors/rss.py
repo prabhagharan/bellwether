@@ -1,7 +1,9 @@
 import calendar
+import urllib.request
 from datetime import datetime, timezone
 import feedparser
 from bellwether.connectors.base import RawItem
+from bellwether.ssl_ctx import SSL_CONTEXT
 
 
 class RssConnector:
@@ -9,7 +11,18 @@ class RssConnector:
         self.feed_url = feed_url
 
     def fetch(self) -> list[RawItem]:
-        parsed = feedparser.parse(self.feed_url)
+        # feedparser's built-in fetch does not use the project's SSL_CONTEXT, so https
+        # feeds fail certificate verification in restricted environments and silently
+        # return zero entries. Fetch the bytes ourselves with SSL_CONTEXT (like the
+        # other connectors) and hand them to feedparser. Non-http sources (local file
+        # paths used by the test suite) go straight to feedparser unchanged.
+        if self.feed_url.startswith(("http://", "https://")):
+            req = urllib.request.Request(self.feed_url, headers={"User-Agent": "bellwether/1.0"})
+            with urllib.request.urlopen(req, timeout=10.0, context=SSL_CONTEXT) as resp:
+                source: str | bytes = resp.read()
+        else:
+            source = self.feed_url
+        parsed = feedparser.parse(source)
         items: list[RawItem] = []
         for entry in parsed.entries:
             external_id = entry.get("id") or entry.get("guid") or entry.get("link")
