@@ -34,6 +34,20 @@ is empty.
 
 ## 2. Run the pieces
 
+### One command (recommended)
+
+Run the whole stack natively with Postgres in Docker:
+
+```bash
+./scripts/dev.sh              # API + all 7 workers + frontend, native, hot-reload
+./scripts/dev.sh api web ingest   # only the named processes
+```
+
+`scripts/dev.sh` starts the `db` container, applies migrations, checks ports `8000`/`3000`
+are free, exports the provider keys, and runs everything under `honcho` (colored per-process
+logs; one Ctrl-C stops all). The individual commands below are what it runs, for when you
+want to launch a piece by hand.
+
 Each is a separate process. Run the API + whichever workers you need.
 
 ```bash
