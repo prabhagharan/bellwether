@@ -12,6 +12,10 @@ def test_figure_and_source_lifecycle(client, auth_headers):
     fid = fig["id"]
     # list figures
     assert [f["id"] for f in client.get("/figures", headers=auth_headers).json()] == [fid]
+    # figure creation auto-creates an enabled "news" source
+    auto_sources = client.get(f"/figures/{fid}/sources", headers=auth_headers).json()
+    assert [s["connector_type"] for s in auto_sources] == ["news"]
+    news_sid = auto_sources[0]["id"]
     # add rss source
     r = client.post(f"/figures/{fid}/sources",
                     json={"connector_type": "rss", "config": {"feed_url": "https://x/feed"}},
@@ -26,8 +30,8 @@ def test_figure_and_source_lifecycle(client, auth_headers):
     # disable the source
     r = client.patch(f"/sources/{sid}", json={"enabled": False}, headers=auth_headers)
     assert r.status_code == 200 and r.json()["enabled"] is False
-    # list sources
-    assert [s["id"] for s in client.get(f"/figures/{fid}/sources", headers=auth_headers).json()] == [sid]
+    # list sources (auto-created news source + manually-added rss source)
+    assert [s["id"] for s in client.get(f"/figures/{fid}/sources", headers=auth_headers).json()] == [news_sid, sid]
     # delete source + figure
     assert client.delete(f"/sources/{sid}", headers=auth_headers).status_code == 204
     assert client.delete(f"/figures/{fid}", headers=auth_headers).status_code == 204
