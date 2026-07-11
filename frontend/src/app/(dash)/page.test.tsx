@@ -67,4 +67,14 @@ describe("FeedPage pagination", () => {
       expect(lastQuery().direction).toBe("down");
     });
   });
+
+  it("Prev decrements the offset back to the previous page", async () => {
+    GET.mockResolvedValue({ data: makeSignals(25) });
+    renderFeed();
+    await waitFor(() => expect(screen.getByText("sig 1")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /next/i }));   // -> offset 25
+    await waitFor(() => expect(lastQuery().offset).toBe(25));
+    await userEvent.click(screen.getByRole("button", { name: /prev/i }));   // -> offset 0
+    await waitFor(() => expect(lastQuery().offset).toBe(0));
+  });
 });
