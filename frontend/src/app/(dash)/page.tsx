@@ -3,6 +3,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { client } from "@/api/client";
 import { useAlertStream } from "@/hooks/useAlertStream";
+import { SignalItem } from "@/components/SignalItem";
 
 export default function FeedPage() {
   const { alerts, connected } = useAlertStream();
@@ -37,9 +38,7 @@ export default function FeedPage() {
         {error && <p className="text-sm text-red-600">Failed to load signals.</p>}
         <ul className="space-y-2">
           {(signals ?? []).map((s: any) => (
-            <li key={s.id} className="rounded border bg-white p-3 text-sm">
-              {s.direction}/{s.magnitude} · conf {s.confidence?.toFixed?.(2)} · {(s.entities ?? []).join(", ")}
-            </li>
+            <SignalItem key={s.id} signal={s} />
           ))}
         </ul>
       </section>

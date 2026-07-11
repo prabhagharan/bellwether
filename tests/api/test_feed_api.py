@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from sqlalchemy import select
 from bellwether.models.user import User
 from bellwether.models.figure import Figure
 from bellwether.models.source import Source
@@ -50,3 +51,35 @@ def test_feed_excludes_other_owners_data(client, auth_headers, db_session):
     assert all(row["figure_id"] != f.id for row in leaderboard)
     # the tester owns no chains, so their impacts feed is empty (the other owner's impact excluded)
     assert client.get("/impacts", headers=auth_headers).json() == []
+
+
+def test_signals_include_source_context(client, auth_headers, db_session):
+    """/signals carries the underlying source context: headline, url, source type,
+    figure name, published date, and the evidence quote."""
+    tester = db_session.execute(select(User).where(User.username == "tester")).scalar_one()
+    f = Figure(name="Donald Trump", type="individual", aliases=[], owner_id=tester.id)
+    db_session.add(f); db_session.flush()
+    s = Source(figure_id=f.id, connector_type="news", config={"query": "Donald Trump"},
+               provenance="news", origin="auto", owner_id=tester.id)
+    db_session.add(s); db_session.flush()
+    st = Statement(figure_id=f.id, source_id=s.id, external_id="e1",
+                   text="Trump signals 25% EV tariffs", url="https://news.example/article",
+                   provenance="news", published_at=datetime(2026, 7, 11, tzinfo=timezone.utc),
+                   status="resolved")
+    db_session.add(st); db_session.flush()
+    ex = Extraction(statement_id=st.id, entities=["TSLA"], direction="down", magnitude="moderate",
+                    confidence=0.72, evidence_quote="tariffs will crush margins",
+                    model="m", version="baseline")
+    db_session.add(ex); db_session.flush()
+
+    rows = client.get("/signals", headers=auth_headers).json()
+    row = next(x for x in rows if x["id"] == ex.id)
+    assert row["text"] == "Trump signals 25% EV tariffs"
+    assert row["url"] == "https://news.example/article"
+    assert row["source_type"] == "news"
+    assert row["figure_name"] == "Donald Trump"
+    assert row["published_at"].startswith("2026-07-11")
+    assert row["evidence_quote"] == "tariffs will crush margins"
+    # existing fields still present
+    assert row["direction"] == "down" and row["magnitude"] == "moderate"
+    assert row["entities"] == ["TSLA"]
