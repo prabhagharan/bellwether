@@ -8,7 +8,7 @@ see the [README](../README.md); for the "why" behind these decisions, see the sp
 
 Bellwether is a set of independent, restartable processes that share one Postgres
 database as both the system of record and the job queue. Nothing talks to anything
-else directly — a FastAPI process serves the API and dashboard, six worker processes
+else directly — a FastAPI process serves the API and dashboard, seven worker processes
 each drive one pipeline stage, and Postgres is the only thing all of them touch. A
 worker crashing, or being killed and restarted, loses at most the one row it had
 claimed — a stale-reclaim sweep puts that row back in the queue.
@@ -83,6 +83,10 @@ picks the row up whenever it next polls.
   error, unknown connector type, parser exception) is logged and skipped; it does
   **not** abort the rest of the pass or roll back statements already committed for
   other sources in the same run. (This is a fixed bug — see §8.)
+
+The `ingest` stage is a deliberate variant of the claim/reclaim pattern — it stamps
+`last_polled_at` at claim time as both schedule clock and claim guard, so it needs no
+in-flight status and no reclaim.
 
 ### 2.2 Detect
 - **Consumes:** `statements` in `status="new"`.
@@ -166,7 +170,7 @@ machine — see §3.
 
 ## 3. Worker & queue model
 
-Every worker is a `python -m bellwether.worker {detect|extract|resolve|measure|discovery|alert}`
+Every worker is a `python -m bellwether.worker {ingest|detect|extract|resolve|measure|discovery|alert}`
 CLI process running `run_worker(stage)` in a loop, where `Stage` is one
 generic dataclass:
 
@@ -179,8 +183,8 @@ class Stage:
     process: Callable[[Session, object], None]
 ```
 
-`worker.py` has no per-stage special-casing in the run loop — `make_detect_stage`,
-`make_extract_stage`, `make_resolve_stage`, `make_measure_stage`,
+`worker.py` has no per-stage special-casing in the run loop — `make_ingest_stage`,
+`make_detect_stage`, `make_extract_stage`, `make_resolve_stage`, `make_measure_stage`,
 `make_discovery_stage`, and `make_alert_stage` each just assemble a `Stage` from
 this one shape.
 

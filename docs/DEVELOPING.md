@@ -47,6 +47,7 @@ Each is a separate process. Run the API + whichever workers you need.
 .venv/bin/python -m bellwether.worker measure      # event-study impact
 .venv/bin/python -m bellwether.worker discovery    # auto-discover a figure's sources
 .venv/bin/python -m bellwether.worker alert        # evaluate alert rules -> webhooks + SSE
+.venv/bin/python -m bellwether.worker ingest       # poll enabled sources on their poll_interval -> new statements
 # add --once to drain the queue once and exit (default: run as a daemon)
 
 # Prompt optimization (operator CLI, not an API)
@@ -107,6 +108,6 @@ touching the stages that consume them.
 
 ## 5. Docker
 
-For the full containerized stack (Postgres + migrations + API + all six workers + the frontend in one
+For the full containerized stack (Postgres + migrations + API + all seven workers + the frontend in one
 command), see **[../README-docker.md](../README-docker.md)**. `docker compose up -d db` (used above) starts
 just Postgres for host development; `docker compose up --build` runs everything.
