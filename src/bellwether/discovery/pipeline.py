@@ -7,6 +7,7 @@ from bellwether.models.source import Source
 from bellwether.discovery.contracts import SourceBinding
 from bellwether.discovery.verify import score_binding
 from bellwether.discovery.connectors import youtube_feed_url, x_binding, domain_of, discover_feed_links
+from bellwether.connectors.registry import KNOWN_CONNECTOR_TYPES
 
 
 def _identity(connector_type: str, config: dict) -> str:
@@ -84,9 +85,15 @@ def run_discovery(session: Session, figure: Figure, *, wikidata, web_search, x_v
     # pending_review (no wikidata signal), but the path must not be silently dead.
     results = web_search.search(f"{figure.name} official blog rss feed")
     for cand in discoverer.gapfill(figure.name, known, results):
-        reachable = _reachable(cand.config.get("feed_url", ""), http) if cand.connector_type == "rss" else False
-        signals = {"domain_match": official_domain is not None and
-                   domain_of(cand.config.get("feed_url", "")) == official_domain,
+        # Drop LLM proposals whose connector_type has no registered connector: they can never
+        # ingest (build_connector would raise UnknownConnectorType), so persisting them would
+        # create a source that looks active but silently fetches nothing.
+        if cand.connector_type not in KNOWN_CONNECTOR_TYPES:
+            continue
+        # A candidate's address may live under feed_url (rss) or url (other types); read either.
+        cand_url = cand.config.get("feed_url") or cand.config.get("url") or ""
+        reachable = _reachable(cand_url, http) if cand.connector_type == "rss" else False
+        signals = {"domain_match": official_domain is not None and domain_of(cand_url) == official_domain,
                    "reachable": reachable}
         bindings.append(_binding(cand.connector_type, cand.config, signals, threshold, ambiguous, source="tavily"))
 
