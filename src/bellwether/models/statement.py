@@ -15,9 +15,9 @@ class Statement(Base):
     source_id: Mapped[int] = mapped_column(
         ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    external_id: Mapped[str] = mapped_column(String(500), nullable=False)
+    external_id: Mapped[str] = mapped_column(Text, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
     provenance: Mapped[str] = mapped_column(String(20), nullable=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     ingested_at: Mapped[datetime] = mapped_column(
