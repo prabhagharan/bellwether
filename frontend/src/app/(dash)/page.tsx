@@ -5,11 +5,15 @@ import { client } from "@/api/client";
 import { useAlertStream } from "@/hooks/useAlertStream";
 import { SignalItem } from "@/components/SignalItem";
 
+const PAGE = 25;
+
 export default function FeedPage() {
   const { alerts, connected } = useAlertStream();
   const [direction, setDirection] = useState("");
-  const { data: signals, isLoading, error } = useSWR(["/signals", direction], async () => {
-    const { data } = await client.GET("/signals", { params: { query: direction ? { direction } : {} } });
+  const [offset, setOffset] = useState(0);
+  const { data: signals, isLoading, error } = useSWR(["/signals", direction, offset], async () => {
+    const query = { limit: PAGE, offset, ...(direction ? { direction } : {}) };
+    const { data } = await client.GET("/signals", { params: { query: query as any } });
     return data ?? [];
   });
 
@@ -30,7 +34,8 @@ export default function FeedPage() {
       </section>
       <section>
         <h2 className="mb-2 font-semibold">Recent signals</h2>
-        <select className="mb-2 rounded border p-1 text-sm" value={direction} onChange={(e) => setDirection(e.target.value)}>
+        <select className="mb-2 rounded border p-1 text-sm" value={direction}
+                onChange={(e) => { setDirection(e.target.value); setOffset(0); }}>
           <option value="">all directions</option><option value="up">up</option>
           <option value="down">down</option><option value="neutral">neutral</option>
         </select>
@@ -41,6 +46,15 @@ export default function FeedPage() {
             <SignalItem key={s.id} signal={s} />
           ))}
         </ul>
+        <div className="mt-3 flex items-center gap-3 text-sm">
+          <button type="button" className="rounded border px-2 py-1 disabled:opacity-40"
+                  disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - PAGE))}>Prev</button>
+          <span className="text-gray-500">Page {offset / PAGE + 1}</span>
+          <button type="button" className="rounded border px-2 py-1 disabled:opacity-40"
+                  disabled={(signals?.length ?? 0) < PAGE}
+                  onClick={() => setOffset(offset + PAGE)}>Next</button>
+        </div>
       </section>
     </div>
   );
