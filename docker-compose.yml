@@ -96,6 +96,15 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  ingest:
+    build: .
+    command: python -m bellwether.worker ingest
+    env_file: .env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
