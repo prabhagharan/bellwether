@@ -12,8 +12,10 @@ router = APIRouter()
 @router.post("/figures", response_model=FigureRead, status_code=status.HTTP_201_CREATED)
 def create_figure(body: FigureCreate, session: Session = Depends(get_session),
                   user: User = Depends(get_current_user)):
-    return repo.create_figure(session, body.name, body.type, body.aliases, owner_id=user.id,
-                              discover=body.discover)
+    figure = repo.create_figure(session, body.name, body.type, body.aliases, owner_id=user.id,
+                                discover=body.discover)
+    repo.create_news_source(session, figure, owner_id=user.id)
+    return figure
 
 
 @router.get("/figures", response_model=list[FigureRead])

@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from bellwether.config import get_settings
 from bellwether.models.figure import Figure
 from bellwether.models.source import Source
 
@@ -46,6 +47,37 @@ def add_source(session: Session, figure_id: int, connector_type: str, config: di
     session.add(source)
     session.flush()
     return source
+
+
+def create_news_source(session: Session, figure: Figure, owner_id: int | None) -> Source:
+    """Auto-create an enabled Google-News source for a figure (query = the figure's name).
+
+    Deterministic, so it is enabled immediately — it does not pass through the discovery
+    confidence gate that LLM-proposed sources use.
+    """
+    source = Source(
+        figure_id=figure.id, connector_type="news", config={"query": figure.name},
+        provenance="news", origin="auto", owner_id=owner_id,
+        enabled=True, status="active",
+        poll_interval_seconds=get_settings().news_poll_interval_seconds,
+    )
+    session.add(source)
+    session.flush()
+    return source
+
+
+def backfill_news_sources(session: Session) -> int:
+    """Create a news source for every figure that lacks one. Returns the count created."""
+    created = 0
+    for figure in session.execute(select(Figure)).scalars().all():
+        has_news = session.execute(
+            select(Source).where(Source.figure_id == figure.id, Source.connector_type == "news")
+        ).first()
+        if has_news is None:
+            create_news_source(session, figure, owner_id=figure.owner_id)
+            created += 1
+    session.flush()
+    return created
 
 
 def list_sources(session: Session, figure_id: int, owner_id: int | None) -> list[Source]:
