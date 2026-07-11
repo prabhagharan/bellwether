@@ -39,7 +39,8 @@ for port in 8000 3000; do
 done
 
 # --- 4. env: export ONLY the provider keys + litellm flag (never 'source .env' — it mangles
-#         CORS_ORIGINS's JSON). pydantic-settings reads .env for DATABASE_URL/JWT/CORS itself. ---
+#         CORS_ORIGINS's JSON). pydantic-settings reads .env for DATABASE_URL/JWT/CORS itself.
+#         (These keys are simple whitespace-free tokens, so the xargs word-split is safe.) ---
 export $(grep -E '^(ANTHROPIC_API_KEY|TAVILY_API_KEY|X_API_KEY)=' .env | xargs) 2>/dev/null || true
 export LITELLM_LOCAL_MODEL_COST_MAP=True
 
