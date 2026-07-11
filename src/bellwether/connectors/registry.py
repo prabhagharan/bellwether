@@ -12,8 +12,13 @@ class UnknownConnectorType(Exception):
 
 
 # The connector types that have a real implementation below and can actually ingest.
-# Discovery uses this to reject LLM-proposed source types it could never fetch.
 KNOWN_CONNECTOR_TYPES = frozenset({"rss", "x", "news"})
+
+# Connector types the discovery pipeline's LLM gap-fill is allowed to PROPOSE. A subset of
+# KNOWN_CONNECTOR_TYPES: "news" is excluded because news sources are auto-created per figure
+# (deterministic, query = figure name), never discovered — letting gap-fill propose "news"
+# would create a second, inconsistent news source.
+DISCOVERABLE_CONNECTOR_TYPES = frozenset({"rss", "x"})
 
 
 def build_connector(source: Source) -> SourceConnector:

@@ -179,3 +179,26 @@ def test_gapfill_domain_match_reads_url_key(db_session):
     assert len(gap) == 1
     assert gap[0].discovery_meta["domain_match"] is True       # fed.gov == official domain
     assert gap[0].discovery_confidence >= 0.3                  # at least the domain_match weight
+
+
+class NewsProposingDiscoverer:
+    def disambiguate(self, name, candidates): return Disambiguation(qid="Q1", confidence=0.95)
+    def gapfill(self, figure_name, known, results):
+        return [
+            SourceCandidate(connector_type="rss",
+                            config={"feed_url": "https://blog.example.com/feed"}, rationale="ok"),
+            SourceCandidate(connector_type="news",
+                            config={"query": "X"}, rationale="LLM tried to propose a news source"),
+        ]
+
+
+def test_gapfill_does_not_propose_news_source(db_session):
+    """`news` is auto-created per figure, not discovered. Even though it's a registered,
+    ingestable connector type, the discovery gap-fill must NOT create a news source
+    (that would duplicate the auto-created one)."""
+    f = _figure(db_session)
+    run_discovery(db_session, f, wikidata=NoMatchWikidata(), web_search=GapWeb(),
+                  x_verifier=StubX(), discoverer=NewsProposingDiscoverer(), http=StubHttp())
+    db_session.flush()
+    srcs = db_session.execute(select(Source).where(Source.figure_id == f.id)).scalars().all()
+    assert [s.connector_type for s in srcs] == ["rss"]        # rss kept, proposed news dropped
