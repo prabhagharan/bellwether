@@ -25,8 +25,10 @@ from bellwether.queue import (
     claim_one, reclaim_stale, claim_due_impact, reclaim_stale_impacts,
     claim_pending_figure, reclaim_stale_figures,
     claim_pending_extraction, reclaim_stale_alerting,
+    claim_due_source,
 )
 from bellwether.alerts.engine import evaluate_extraction
+from bellwether.ingest import ingest_source
 from bellwether.llm.detect import build_detector
 from bellwether.llm.extract import build_extractor
 from bellwether.programs import load_champion
@@ -233,6 +235,23 @@ def make_alert_stage(notifier) -> Stage:
     )
 
 
+def make_ingest_stage() -> Stage:
+    def process(session: Session, source) -> None:
+        # ingest_source fetches via build_connector, dedups by external_id, inserts
+        # status="new" statements, and flushes. The claim already stamped last_polled_at
+        # (stamp-first), so a fetch error here rolls back only these statements while the
+        # advanced timer stands -> back off one interval. reclaim is a no-op by design.
+        ingest_source(session, source)
+        session.commit()
+
+    return Stage(
+        name="ingest",
+        claim_next=lambda s: claim_due_source(s),
+        reclaim=lambda s, secs: 0,
+        process=process,
+    )
+
+
 def run_worker(stage: Stage, *, session_factory=SessionLocal, poll_interval=None,
                reclaim_interval_seconds: float | None = None,
                once: bool = False, stop_event: "threading.Event | None" = None) -> int:
@@ -303,12 +322,14 @@ def _build_stage(name: str) -> Stage:
     if name == "alert":
         from bellwether.alerts.notifier import build_notifier
         return make_alert_stage(build_notifier())
+    if name == "ingest":
+        return make_ingest_stage()
     return make_measure_stage(build_market_data(), settings.measure_baseline_bars)
 
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="bellwether.worker")
-    parser.add_argument("stage", choices=["detect", "extract", "resolve", "measure", "discovery", "alert"])
+    parser.add_argument("stage", choices=["detect", "extract", "resolve", "measure", "discovery", "alert", "ingest"])
     parser.add_argument("--once", action="store_true",
                         help="drain the queue once and exit (default: run as a daemon)")
     args = parser.parse_args(argv)
