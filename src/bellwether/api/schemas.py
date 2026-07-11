@@ -139,6 +139,12 @@ class SignalRead(BaseModel):
     confidence: float
     entities: list
     version: str
+    text: str
+    url: str | None
+    source_type: str
+    figure_name: str
+    published_at: datetime
+    evidence_quote: str
 
 
 class ImpactRead(BaseModel):

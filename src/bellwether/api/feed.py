@@ -7,6 +7,7 @@ from bellwether.models.user import User
 from bellwether.models.figure import Figure
 from bellwether.models.statement import Statement
 from bellwether.models.extraction import Extraction
+from bellwether.models.source import Source
 from bellwether.models.resolution import Resolution
 from bellwether.models.impact import Impact
 from bellwether.trackb.report import leaderboard_by_figure
@@ -24,8 +25,12 @@ def leaderboard(session: Session = Depends(get_session), user: User = Depends(ge
 def signals(figure_id: int | None = None, direction: str | None = None,
             min_confidence: float | None = None, limit: int = Query(default=50, ge=1, le=500),
             session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    q = (select(Extraction).join(Statement, Statement.id == Extraction.statement_id)
-         .join(Figure, Figure.id == Statement.figure_id).where(Figure.owner_id == user.id))
+    q = (select(Extraction, Statement.text, Statement.url, Statement.published_at,
+                Source.connector_type, Figure.name)
+         .join(Statement, Statement.id == Extraction.statement_id)
+         .join(Source, Source.id == Statement.source_id)
+         .join(Figure, Figure.id == Statement.figure_id)
+         .where(Figure.owner_id == user.id))
     if figure_id is not None:
         q = q.where(Statement.figure_id == figure_id)
     if direction is not None:
@@ -33,7 +38,15 @@ def signals(figure_id: int | None = None, direction: str | None = None,
     if min_confidence is not None:
         q = q.where(Extraction.confidence >= min_confidence)
     q = q.order_by(Extraction.id.desc()).limit(limit)
-    return list(session.execute(q).scalars())
+    return [
+        SignalRead(
+            id=ex.id, statement_id=ex.statement_id, direction=ex.direction,
+            magnitude=ex.magnitude, confidence=ex.confidence, entities=ex.entities,
+            version=ex.version, text=text, url=url, source_type=connector_type,
+            figure_name=figure_name, published_at=published_at, evidence_quote=ex.evidence_quote,
+        )
+        for ex, text, url, published_at, connector_type, figure_name in session.execute(q).all()
+    ]
 
 
 @router.get("/impacts", response_model=list[ImpactRead])
