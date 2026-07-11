@@ -210,7 +210,7 @@ what unsticks it for another worker to pick up.
 
 **Four independent claim columns — so stages don't contend.** There is no single
 global queue table; each stage claims off its own column, so a slow Measure fetch
-never blocks Detect from claiming new statements, and running six workers
+never blocks Detect from claiming new statements, and running seven workers
 concurrently against the same tables never causes them to block each other on
 locks meant for a different stage's rows:
 
