@@ -35,7 +35,7 @@ with these fields (existing fields unchanged):
 |---|---|---|
 | `text` | `Statement.text` | the headline / post text |
 | `url` | `Statement.url` | link to the article/post; **nullable** |
-| `source_type` | `Source.connector_type` | `news` / `x` / `rss` — precise "what kind of source" (more descriptive than `provenance`, which is only news-vs-first-party) |
+| `source_type` | `Source.connector_type` | `news` / `x` / `rss` — precise "what kind of source" (more descriptive than `provenance`, which is only news-vs-first-party); always present (see join note) |
 | `figure_name` | `Figure.name` | who the signal is about |
 | `published_at` | `Statement.published_at` | when |
 | `evidence_quote` | `Extraction.evidence_quote` | the verbatim snippet the signal was extracted from |
@@ -49,9 +49,9 @@ It will instead select the joined columns it needs and build each `SignalRead` e
 `Figure.name`). Query params, filters (`figure_id`, `direction`, `min_confidence`), ordering
 (`Extraction.id desc`), and `limit` are unchanged.
 
-**Join note:** `Statement.source_id` is `ON DELETE SET NULL` (a statement can outlive its
-source). Use an outer join to `Source` so a signal whose source was deleted still returns
-(with `source_type = null`), rather than being dropped by an inner join.
+**Join note:** `Statement.source_id` is `NOT NULL` with `ON DELETE CASCADE` — deleting a
+source cascades to its statements, so every statement always has a live source. A plain
+inner join to `Source` is correct, and `source_type` is always present (never null).
 
 ### 2. Frontend — compact, expandable signal card
 
@@ -81,10 +81,9 @@ GET /signals  (joins Extraction → Statement → Figure, outer-join Source)
 
 ## Error handling
 
-- `url` null → no link rendered. `source_type` null (source deleted) → tag omitted or shown
-  as "—". `evidence_quote` is `NOT NULL` in the schema so always present.
-- The endpoint's outer join guarantees a signal is never dropped just because its source row
-  was deleted.
+- `url` null → no link rendered. `evidence_quote` and `source_type` are always present
+  (`evidence_quote` is `NOT NULL`; `Statement.source_id` is `NOT NULL` + `CASCADE`, so every
+  statement has a live source).
 
 ## Testing
 
@@ -92,8 +91,6 @@ GET /signals  (joins Extraction → Statement → Figure, outer-join Source)
   + statement + extraction, `GET /signals`, and assert the response carries the new fields
   with the right values (`text`, `url`, `source_type == source.connector_type`,
   `figure_name`, `published_at`, `evidence_quote`). Assert the existing fields still present.
-  Add a case where the statement's `source_id` is null → `source_type` is null and the signal
-  is still returned (outer join).
 - **Frontend** (`SignalItem` component test, vitest — same harness as
   `frontend/src/hooks/useAlertStream.test.ts`): renders the compact summary (badge + headline
   + confidence); clicking expands to show the evidence quote and the link; a null `url`
