@@ -76,13 +76,19 @@ picks the row up whenever it next polls.
 - **Consumes:** enabled `sources` rows (`connector_type`, `config` JSON, poll interval).
 - **Writes:** new `statements` rows (`status="new"`), deduped by `(source_id,
   external_id)`.
-- **Logic:** `run_ingest_pass` (`src/bellwether/ingest.py`) iterates enabled sources,
-  builds a connector via `build_connector(source)`, fetches, and inserts statements
-  not already seen for that source. Each source is committed independently.
-- **Errors:** per-source `try/except Exception` — one source's failure (network
-  error, unknown connector type, parser exception) is logged and skipped; it does
-  **not** abort the rest of the pass or roll back statements already committed for
-  other sources in the same run. (This is a fixed bug — see §8.)
+- **Logic:** the `ingest` worker stage claims one *due* enabled source per tick via
+  `claim_due_source` (enabled, and `last_polled_at + poll_interval_seconds` elapsed),
+  then `ingest_source` (`src/bellwether/ingest.py`) builds a connector via
+  `build_connector(source)`, fetches, and inserts statements not already seen for that
+  source, committing that source's batch. (`run_ingest_pass` in the same module is a
+  batch "poll every enabled source once" helper retained for tests/one-off use; the
+  scheduled stage uses the per-source claim path, not that loop.)
+- **Errors:** a source's failure (network error, unknown connector type, parser
+  exception) propagates to `run_worker`'s `try/except`, which rolls back that source's
+  statements and logs it; because the claim already advanced `last_polled_at`, the
+  source backs off one full interval before retry. Other sources are unaffected — each
+  is claimed on its own tick. (`run_ingest_pass`'s own per-source guard is a separate,
+  historical fix — see §8.)
 
 The `ingest` stage is a deliberate variant of the claim/reclaim pattern — it stamps
 `last_polled_at` at claim time as both schedule clock and claim guard, so it needs no
