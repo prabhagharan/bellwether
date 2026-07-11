@@ -9,6 +9,11 @@ class UnknownConnectorType(Exception):
     pass
 
 
+# The connector types that have a real implementation below and can actually ingest.
+# Discovery uses this to reject LLM-proposed source types it could never fetch.
+KNOWN_CONNECTOR_TYPES = frozenset({"rss", "x"})
+
+
 def build_connector(source: Source) -> SourceConnector:
     if source.connector_type == "rss":
         return RssConnector(source.config["feed_url"])

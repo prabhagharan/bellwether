@@ -124,3 +124,58 @@ def test_gapfill_runs_without_wikidata_match(db_session):
     assert srcs[0].connector_type == "rss"
     assert srcs[0].status == "pending_review" and srcs[0].enabled is False   # LLM proposal cannot auto-enable
     assert srcs[0].discovery_meta["source"] == "tavily"
+
+
+class UnknownTypeDiscoverer:
+    """gap-fill returns a valid rss plus two types no connector can ingest."""
+    def disambiguate(self, name, candidates): return Disambiguation(qid="Q1", confidence=0.95)
+    def gapfill(self, figure_name, known, results):
+        return [
+            SourceCandidate(connector_type="rss",
+                            config={"feed_url": "https://blog.example.com/feed"}, rationale="valid"),
+            SourceCandidate(connector_type="twitter",
+                            config={"url": "https://x.com/foo", "handle": "foo"}, rationale="dupe of x"),
+            SourceCandidate(connector_type="government_website",
+                            config={"url": "https://gov.example/news"}, rationale="no connector exists"),
+        ]
+
+
+def test_gapfill_drops_unregistered_connector_types(db_session):
+    """BUG #2: the LLM proposes connector types with no registered connector. They can never
+    ingest (UnknownConnectorType) and must NOT be persisted as sources — only rss/x survive."""
+    f = _figure(db_session)
+    run_discovery(db_session, f, wikidata=NoMatchWikidata(), web_search=GapWeb(),
+                  x_verifier=StubX(), discoverer=UnknownTypeDiscoverer(), http=StubHttp())
+    db_session.flush()
+    srcs = db_session.execute(select(Source).where(Source.figure_id == f.id)).scalars().all()
+    assert [s.connector_type for s in srcs] == ["rss"]          # twitter + government_website dropped
+    assert srcs[0].config["feed_url"] == "https://blog.example.com/feed"
+
+
+class SiteOnlyWikidata:
+    """Establishes an official domain (website) but no x/youtube, so gap-fill is the only extra."""
+    def search(self, name): return [WikidataEntity("Q1", name, "desc")]
+    def claims(self, qid):
+        return WikidataClaims(website="https://fed.gov", x_username=None, youtube_channel=None, aliases=[])
+
+
+class UrlKeyedRssDiscoverer:
+    def disambiguate(self, name, candidates): return Disambiguation(qid="Q1", confidence=0.95)
+    def gapfill(self, figure_name, known, results):
+        # an rss candidate whose address is under 'url' (not 'feed_url'), on the official domain
+        return [SourceCandidate(connector_type="rss",
+                                config={"url": "https://fed.gov/press-feed"}, rationale="on official domain")]
+
+
+def test_gapfill_domain_match_reads_url_key(db_session):
+    """BUG #1: domain_match must recognise a candidate's address whether it's under feed_url or
+    url. A gap-fill source on the figure's official domain should earn the domain_match signal."""
+    f = _figure(db_session)
+    run_discovery(db_session, f, wikidata=SiteOnlyWikidata(), web_search=GapWeb(),
+                  x_verifier=StubX(), discoverer=UrlKeyedRssDiscoverer(), http=StubHttp())
+    db_session.flush()
+    gap = [s for s in db_session.execute(select(Source).where(Source.figure_id == f.id)).scalars()
+           if s.discovery_meta.get("source") == "tavily"]
+    assert len(gap) == 1
+    assert gap[0].discovery_meta["domain_match"] is True       # fed.gov == official domain
+    assert gap[0].discovery_confidence >= 0.3                  # at least the domain_match weight
