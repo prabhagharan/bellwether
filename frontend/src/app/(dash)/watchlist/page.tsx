@@ -4,20 +4,47 @@ import useSWR from "swr";
 import { client } from "@/api/client";
 import { Badge } from "@/components/Badge";
 
+// Pull the meaningful identifier out of a source's connector config so the
+// user can see WHAT a source points to (feed URL, X handle, page URL), not
+// just its type. Returns a link href when the detail is navigable.
+function sourceDetail(s: any): { text: string; href?: string } | null {
+  const c = s.config ?? {};
+  if (c.feed_url) return { text: c.feed_url, href: c.feed_url };
+  if (c.handle) return { text: `@${c.handle}`, href: `https://x.com/${c.handle}` };
+  if (c.url) return { text: c.url, href: c.url };
+  if (c.platform) return { text: c.note ? `${c.platform} — ${c.note}` : c.platform };
+  const keys = Object.keys(c);
+  return keys.length ? { text: keys.map((k) => `${k}: ${c[k]}`).join(", ") } : null;
+}
+
 function SourceList({ figureId }: { figureId: number }) {
   const { data } = useSWR(["/figures/sources", figureId], async () => {
     const { data } = await client.GET("/figures/{figure_id}/sources", { params: { path: { figure_id: figureId } } });
     return data ?? [];
   });
   return (
-    <ul className="ml-4 mt-1 space-y-1 text-sm">
-      {(data ?? []).map((s: any) => (
-        <li key={s.id} className="flex items-center gap-2">
-          <span className="text-gray-700">{s.connector_type}</span>
-          <Badge tone={s.status === "active" ? "green" : s.status === "pending_review" ? "amber" : "gray"}>{s.status}</Badge>
-          {s.discovery_confidence != null && <span className="text-gray-400">conf {s.discovery_confidence.toFixed(2)}</span>}
-        </li>
-      ))}
+    <ul className="ml-4 mt-1 space-y-1.5 text-sm">
+      {(data ?? []).map((s: any) => {
+        const detail = sourceDetail(s);
+        return (
+          <li key={s.id}>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-700">{s.connector_type}</span>
+              <Badge tone={s.status === "active" ? "green" : s.status === "pending_review" ? "amber" : "gray"}>{s.status}</Badge>
+              {s.discovery_confidence != null && <span className="text-gray-400">conf {s.discovery_confidence.toFixed(2)}</span>}
+            </div>
+            {detail && (
+              <div className="truncate text-xs text-gray-500" title={detail.text}>
+                {detail.href ? (
+                  <a href={detail.href} target="_blank" rel="noreferrer" className="hover:underline">{detail.text}</a>
+                ) : (
+                  detail.text
+                )}
+              </div>
+            )}
+          </li>
+        );
+      })}
       {(data ?? []).length === 0 && <li className="text-gray-400">no sources yet</li>}
     </ul>
   );
