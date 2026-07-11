@@ -83,3 +83,36 @@ def test_signals_include_source_context(client, auth_headers, db_session):
     # existing fields still present
     assert row["direction"] == "down" and row["magnitude"] == "moderate"
     assert row["entities"] == ["TSLA"]
+
+
+def test_signals_offset_pagination(client, auth_headers, db_session):
+    tester = db_session.execute(select(User).where(User.username == "tester")).scalar_one()
+    f = Figure(name="P", type="individual", aliases=[], owner_id=tester.id)
+    db_session.add(f); db_session.flush()
+    s = Source(figure_id=f.id, connector_type="news", config={"query": "P"},
+               provenance="news", origin="auto", owner_id=tester.id)
+    db_session.add(s); db_session.flush()
+    ex_ids = []
+    for i in range(5):
+        st = Statement(figure_id=f.id, source_id=s.id, external_id=f"e{i}", text=f"t{i}", url=None,
+                       provenance="news", published_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                       status="resolved")
+        db_session.add(st); db_session.flush()
+        ex = Extraction(statement_id=st.id, entities=[], direction="up", magnitude="small",
+                        confidence=0.5, evidence_quote=f"t{i}", model="m", version="baseline")
+        db_session.add(ex); db_session.flush()
+        ex_ids.append(ex.id)
+
+    # newest first (id DESC): ex_ids[4], ex_ids[3], ...
+    page1 = client.get("/signals?limit=2&offset=0", headers=auth_headers).json()
+    page2 = client.get("/signals?limit=2&offset=2", headers=auth_headers).json()
+    assert [x["id"] for x in page1] == [ex_ids[4], ex_ids[3]]
+    assert [x["id"] for x in page2] == [ex_ids[2], ex_ids[1]]
+    assert set(x["id"] for x in page1).isdisjoint(x["id"] for x in page2)   # no overlap
+    # offset past the end -> empty page
+    assert client.get("/signals?limit=2&offset=10", headers=auth_headers).json() == []
+    # offset composes with the direction filter
+    upp = client.get("/signals?direction=up&limit=2&offset=2", headers=auth_headers).json()
+    assert [x["id"] for x in upp] == [ex_ids[2], ex_ids[1]]
+    # negative offset rejected
+    assert client.get("/signals?offset=-1", headers=auth_headers).status_code == 422

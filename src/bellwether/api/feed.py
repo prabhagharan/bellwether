@@ -24,6 +24,7 @@ def leaderboard(session: Session = Depends(get_session), user: User = Depends(ge
 @router.get("/signals", response_model=list[SignalRead])
 def signals(figure_id: int | None = None, direction: str | None = None,
             min_confidence: float | None = None, limit: int = Query(default=50, ge=1, le=500),
+            offset: int = Query(default=0, ge=0),
             session: Session = Depends(get_session), user: User = Depends(get_current_user)):
     q = (select(Extraction, Statement.text, Statement.url, Statement.published_at,
                 Source.connector_type, Figure.name)
@@ -37,7 +38,7 @@ def signals(figure_id: int | None = None, direction: str | None = None,
         q = q.where(Extraction.direction == direction)
     if min_confidence is not None:
         q = q.where(Extraction.confidence >= min_confidence)
-    q = q.order_by(Extraction.id.desc()).limit(limit)
+    q = q.order_by(Extraction.id.desc()).offset(offset).limit(limit)
     return [
         SignalRead(
             id=ex.id, statement_id=ex.statement_id, direction=ex.direction,
